@@ -4,10 +4,20 @@
 
 // Master state
 static ec_master_t *master = NULL;
+static ec_master_state_t master_state = {};
+
+static ec_domain_t *domain = NULL;
+static ec_domain_state_t domain_state = {};
 
 static ERL_NIF_TERM nif_request_master(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
     master = ecrt_request_master(0);
     if (!master) return enif_make_atom(env, "error");
+    return enif_make_atom(env, "ok");
+}
+
+static ERL_NIF_TERM nif_master_create_domain(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    domain = ecrt_master_create_domain(master);
+    if (!domain) return enif_make_atom(env, "error");
     return enif_make_atom(env, "ok");
 }
 
@@ -19,7 +29,8 @@ static void unload(ErlNifEnv* env, void* priv_data) {
 
 // NIF definition
 static ErlNifFunc nif_funcs[] = {
-    {"request_master", 0, nif_request_master}
+    {"request_master", 0, nif_request_master},
+    {"master_create_domain", 0, nif_master_create_domain}
 };
 
 ERL_NIF_INIT(Elixir.EthercatEx.Nif, nif_funcs, NULL, NULL, NULL, unload)

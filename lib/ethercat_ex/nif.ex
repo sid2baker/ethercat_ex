@@ -12,9 +12,8 @@ defmodule EthercatEx.Nif do
       end
     end
 
-  def request_master do
-    :erlang.nif_error(:nif_not_loaded)
-  end
+  def request_master, do: :erlang.nif_error(:nif_not_loaded)
+  def master_create_domain, do: :erlang.nif_error(:nif_not_loaded)
 
   # Add additional Elixir wrappers for NIF functions
 end

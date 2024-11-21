@@ -13,8 +13,8 @@ defmodule NifTest do
     end
   end
 
-  @tag :ek1100
   describe "EK1100 example" do
+    @tag :ek1100
     test "configure" do
       :ok = EthercatEx.Nif.request_master()
       :ok = EthercatEx.Nif.master_create_domain()
@@ -22,6 +22,15 @@ defmodule NifTest do
       # TODO pass configuration through
       :ok = EthercatEx.Nif.slave_config_pdos(nil)
       :ok = EthercatEx.Nif.master_activate()
+    end
+  end
+
+  describe "Scan network" do
+    @tag :scan
+    test "yo" do
+      :ok = EthercatEx.Nif.request_master()
+      :ok = EthercatEx.Nif.master_activate()
+      :ok = EthercatEx.Nif.master_state()
     end
   end
 end

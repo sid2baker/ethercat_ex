@@ -24,5 +24,7 @@ defmodule EthercatEx.Nif do
   def master_send, do: :erlang.nif_error(:nif_not_loaded)
   def master_receive, do: :erlang.nif_error(:nif_not_loaded)
 
+  def master_state, do: :erlang.nif_error(:nif_not_loaded)
+
   # Add additional Elixir wrappers for NIF functions
 end

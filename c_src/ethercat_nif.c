@@ -81,6 +81,11 @@ static ERL_NIF_TERM nif_master_receive(ErlNifEnv* env, int argc, const ERL_NIF_T
     return enif_make_atom(env, "ok");
 }
 
+static ERL_NIF_TERM nif_master_state(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    if (ecrt_master_state(master, &master_state)) enif_make_atom(env, "error");
+    return enif_make_atom(env, "ok");
+}
+
 static void unload(ErlNifEnv* env, void* priv_data) {
     if (master) ecrt_release_master(master);
 }
@@ -93,7 +98,8 @@ static ErlNifFunc nif_funcs[] = {
     {"slave_config_pdos", 1, nif_slave_config_pdos},
     {"master_activate", 0, nif_master_activate},
     {"master_send", 0, nif_master_send},
-    {"master_receive", 0, nif_master_receive}
+    {"master_receive", 0, nif_master_receive},
+    {"master_state", 0, nif_master_state}
 };
 
 ERL_NIF_INIT(Elixir.EthercatEx.Nif, nif_funcs, NULL, NULL, NULL, unload)

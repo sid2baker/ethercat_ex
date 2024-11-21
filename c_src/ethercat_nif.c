@@ -51,7 +51,23 @@ static ERL_NIF_TERM nif_master_slave_config(ErlNifEnv* env, int argc, const ERL_
     return enif_make_atom(env, "ok");
 }
 
-// Other functions for PDO, slave configuration, etc.
+static ERL_NIF_TERM nif_slave_config_pdos(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    // TODO pass ec_sync_info_t list through nif and configure the following call
+    static const ec_sync_info_t ek1100_syncs[] = {
+        {0, EC_DIR_OUTPUT},
+        {1, EC_DIR_INPUT},
+        {0xff}
+    };
+    if (ecrt_slave_config_pdos(slave_config, EC_END, ek1100_syncs)) {
+        enif_make_atom(env, "error");
+    }
+    return enif_make_atom(env, "ok");
+}
+
+static ERL_NIF_TERM nif_master_activate(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    if (ecrt_master_activate(master)) enif_make_atom(env, "error");
+    return enif_make_atom(env, "ok");
+}
 
 static void unload(ErlNifEnv* env, void* priv_data) {
     if (master) ecrt_release_master(master);
@@ -61,7 +77,9 @@ static void unload(ErlNifEnv* env, void* priv_data) {
 static ErlNifFunc nif_funcs[] = {
     {"request_master", 0, nif_request_master},
     {"master_create_domain", 0, nif_master_create_domain},
-    {"master_slave_config", 4, nif_master_slave_config}
+    {"master_slave_config", 4, nif_master_slave_config},
+    {"slave_config_pdos", 1, nif_slave_config_pdos},
+    {"master_activate", 0, nif_master_activate}
 };
 
 ERL_NIF_INIT(Elixir.EthercatEx.Nif, nif_funcs, NULL, NULL, NULL, unload)

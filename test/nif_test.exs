@@ -12,4 +12,15 @@ defmodule NifTest do
       assert EthercatEx.Nif.master_create_domain() == :error
     end
   end
+
+  @tag :ek1100
+  describe "EK1100 example" do
+    test "configure" do
+      :ok = EthercatEx.Nif.request_master()
+      :ok = EthercatEx.Nif.master_create_domain()
+      :ok = EthercatEx.Nif.master_slave_config(0, 0, 0x00000002, 0x044c2c52)
+      :ok = EthercatEx.Nif.slave_config_pdos(nil) # TODO pass configuration through
+      :ok = EthercatEx.Nif.master_activate()
+    end
+  end
 end

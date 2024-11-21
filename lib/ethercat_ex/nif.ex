@@ -18,5 +18,8 @@ defmodule EthercatEx.Nif do
   def master_slave_config(_alias, _position, _vendor_id, _product_code),
     do: :erlang.nif_error(:nif_not_loaded)
 
+  def slave_config_pdos(_config), do: :erlang.nif_error(:nif_not_loaded)
+  def master_activate, do: :erlang.nif_error(:nif_not_loaded)
+
   # Add additional Elixir wrappers for NIF functions
 end

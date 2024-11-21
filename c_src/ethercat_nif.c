@@ -69,6 +69,18 @@ static ERL_NIF_TERM nif_master_activate(ErlNifEnv* env, int argc, const ERL_NIF_
     return enif_make_atom(env, "ok");
 }
 
+static ERL_NIF_TERM nif_master_send(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    ecrt_domain_queue(domain);
+    ecrt_master_send(master);
+    return enif_make_atom(env, "ok");
+}
+
+static ERL_NIF_TERM nif_master_receive(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    ecrt_master_receive(master);
+    ecrt_domain_process(domain);
+    return enif_make_atom(env, "ok");
+}
+
 static void unload(ErlNifEnv* env, void* priv_data) {
     if (master) ecrt_release_master(master);
 }
@@ -79,7 +91,9 @@ static ErlNifFunc nif_funcs[] = {
     {"master_create_domain", 0, nif_master_create_domain},
     {"master_slave_config", 4, nif_master_slave_config},
     {"slave_config_pdos", 1, nif_slave_config_pdos},
-    {"master_activate", 0, nif_master_activate}
+    {"master_activate", 0, nif_master_activate},
+    {"master_send", 0, nif_master_send},
+    {"master_receive", 0, nif_master_receive}
 };
 
 ERL_NIF_INIT(Elixir.EthercatEx.Nif, nif_funcs, NULL, NULL, NULL, unload)

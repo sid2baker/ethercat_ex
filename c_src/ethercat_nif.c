@@ -82,7 +82,7 @@ static ERL_NIF_TERM nif_master_receive(ErlNifEnv* env, int argc, const ERL_NIF_T
 }
 
 static ERL_NIF_TERM nif_master_state(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
-    if (ecrt_master_state(master, &master_state)) enif_make_atom(env, "error");
+    ecrt_master_state(master, &master_state);
     return enif_make_atom(env, "ok");
 }
 

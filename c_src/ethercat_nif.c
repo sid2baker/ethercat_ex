@@ -95,16 +95,6 @@ static ERL_NIF_TERM nif_master_state(ErlNifEnv* env, int argc, const ERL_NIF_TER
     return enif_make_atom(env, "ok");
 }
 
-static ERL_NIF_TERM nif_master_set_send_interval(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
-    unsigned int send_interval;
-    if (!enif_get_uint(env, argv[0], &send_interval)) {
-        return enif_make_badarg(env);
-    }
-
-    ecrt_master_set_send_interval(master, send_interval);
-    return enif_make_atom(env, "ok");
-}
-
 void check_domain_state(const ec_domain_t *domain, ErlNifEnv* env) {
     ec_domain_state_t ds;
 
@@ -149,7 +139,6 @@ static ErlNifFunc nif_funcs[] = {
     {"master_send", 0, nif_master_send},
     {"master_receive", 0, nif_master_receive},
     {"master_state", 0, nif_master_state},
-    {"master_set_send_interval", 1, nif_master_set_send_interval},
     {"run", 0, nif_cyclic_task, ERL_NIF_DIRTY_JOB_IO_BOUND}
 };
 

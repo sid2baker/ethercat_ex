@@ -3,7 +3,7 @@ defmodule EthercatEx.Nif do
 
   @on_load :load_nif
   def load_nif do
-    nif_file = ~c"#{:code.priv_dir(:ethercat_ex)}/ethercat_nif"
+    nif_file = :code.priv_dir(:ethercat_ex) ++ Application.get_env(:ethercat_ex, :nif_file)
 
     case :erlang.load_nif(nif_file, 0) do
       :ok -> :ok
@@ -26,8 +26,6 @@ defmodule EthercatEx.Nif do
   def master_receive, do: :erlang.nif_error(:nif_not_loaded)
 
   def master_state, do: :erlang.nif_error(:nif_not_loaded)
-
-  def master_set_send_interval(_send_interval), do: :erlang.nif_error(:nif_not_loaded)
 
   def run, do: :erlang.nif_error(:nif_not_loaded)
 

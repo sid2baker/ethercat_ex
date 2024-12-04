@@ -149,7 +149,7 @@ static ErlNifFunc nif_funcs[] = {
     {"master_send", 0, nif_master_send},
     {"master_receive", 0, nif_master_receive},
     {"master_state", 0, nif_master_state},
-    {"master_set_send_interval", 0, nif_master_set_send_interval},
+    {"master_set_send_interval", 1, nif_master_set_send_interval},
     {"run", 0, nif_cyclic_task, ERL_NIF_DIRTY_JOB_IO_BOUND}
 };
 

@@ -16,7 +16,7 @@ $(NIF_LIB): $(C_SRC_DIR)/ethercat_nif.c
 
 $(FAKE_NIF_LIB): $(C_SRC_DIR)/ethercat_nif.c
 	@mkdir -p $(PRIV_DIR)
-	$(CC) $(CFLAGS) -o $(FAKE_NIF_LIB) $(C_SRC_DIR)/ethercat_nif.c -lfakeethercat -shared
+	$(CC) $(CFLAGS) -o $(FAKE_NIF_LIB) $(C_SRC_DIR)/ethercat_nif.c -lfakeethercat -lethercat -shared
 
 clean:
 	rm -rf $(PRIV_DIR)

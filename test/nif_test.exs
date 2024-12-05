@@ -1,6 +1,7 @@
 defmodule EthernetEx.NifTest do
   use ExUnit.Case
 
+  # FAKE_EC_NAME=FakeEtherCAT is default
   @master_location Path.join(System.tmp_dir!(), "FakeEtherCAT")
 
   setup_all do
@@ -13,11 +14,14 @@ defmodule EthernetEx.NifTest do
     :ok
   end
 
-  test "configure" do
-    :ok = EthercatEx.Nif.request_master()
-    :ok = EthercatEx.Nif.master_create_domain()
-    :ok = EthercatEx.Nif.master_slave_config(0, 0, 0x00000002, 0x044C2C52)
-    :ok = EthercatEx.Nif.slave_config_pdos(nil)
-    :ok = EthercatEx.Nif.master_activate()
+  test "adding domain" do
+    :ok = EthercatEx.Nif.request_master(self())
+    :ok = EthercatEx.Nif.master_create_domain(~c"test")
+    :ok = EthercatEx.Nif.master_remove_domain(~c"test")
+  end
+
+  test "remove not added domain" do
+    :ok = EthercatEx.Nif.request_master(self())
+    :error = EthercatEx.Nif.master_remove_domain(~c"test")
   end
 end

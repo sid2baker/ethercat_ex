@@ -12,21 +12,18 @@ defmodule EthercatEx.Nif do
     end
   end
 
-  def configure, do: :erlang.nif_error(:nif_not_loaded)
-  def request_master, do: :erlang.nif_error(:nif_not_loaded)
-  def master_create_domain, do: :erlang.nif_error(:nif_not_loaded)
+  def request_master(_caller_pid), do: :erlang.nif_error(:nif_not_loaded)
+  def master_create_domain(_name), do: :erlang.nif_error(:nif_not_loaded)
+  def master_remove_domain(_name), do: :erlang.nif_error(:nif_not_loaded)
 
   def master_slave_config(_alias, _position, _vendor_id, _product_code),
     do: :erlang.nif_error(:nif_not_loaded)
 
   def slave_config_pdos(_config), do: :erlang.nif_error(:nif_not_loaded)
   def master_activate, do: :erlang.nif_error(:nif_not_loaded)
+  def master_queue_all_domains, do: :erlang.nif_error(:nif_not_laded)
 
   def master_send, do: :erlang.nif_error(:nif_not_loaded)
-  def master_receive, do: :erlang.nif_error(:nif_not_loaded)
-
-  def master_state, do: :erlang.nif_error(:nif_not_loaded)
-
   def run, do: :erlang.nif_error(:nif_not_loaded)
 
   # Add additional Elixir wrappers for NIF functions

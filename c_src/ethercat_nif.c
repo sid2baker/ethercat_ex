@@ -2,38 +2,109 @@
 #include "erl_nif.h"
 #include "ecrt.h"
 
-static ErlNifPid caller_pid;
+#include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
 
-// Master state
-static ec_master_t *master = NULL;
-static ec_master_state_t master_state = {};
+typedef struct domain_node {
+    char name[256];
+    ec_domain_t *domain;
+    struct domain_node *next;
+} domain_node_t;
 
-static ec_domain_t *domain = NULL;
-static ec_domain_state_t domain_state = {};
+typedef struct {
+    ErlNifPid *caller_pid;
+    ec_master_t *master;
+    domain_node_t *domain_list; // Head of the linked list
+} ethercat_context_t;
 
-static ec_slave_config_t *slave_config = NULL;
-static ec_slave_config_state_t slave_config_state = {};
-
-static ERL_NIF_TERM nif_configure(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
-    if (argc < 1 || enif_get_local_pid(env, argv[0], &caller_pid)) {
-        return enif_make_badarg(env);
+static domain_node_t *get_domain_by_name(ethercat_context_t *context, const char *name) {
+    domain_node_t *current = context->domain_list;
+    while (current) {
+        if (strcmp(current-> name, name) == 0) {
+            return current;
+        }
+        current = current->next;
     }
-    return enif_make_atom(env, "ok");
+    return NULL;
 }
 
 static ERL_NIF_TERM nif_request_master(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
-    master = ecrt_request_master(0);
-    if (!master) return enif_make_atom(env, "error");
+    ethercat_context_t *context = (ethercat_context_t*)enif_priv_data(env);
+    /*
+    TODO this is not working yet..
+    if (enif_get_local_pid(env, argv[0], context->caller_pid)) {
+        return enif_make_badarg(env);
+    }
+    */
+
+    context->master = ecrt_request_master(0);
+    if (!context->master) return enif_make_atom(env, "error");
     return enif_make_atom(env, "ok");
 }
 
 static ERL_NIF_TERM nif_master_create_domain(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
-    if (!master) return enif_make_atom(env, "error");
-    domain = ecrt_master_create_domain(master);
+    ethercat_context_t *context = (ethercat_context_t*)enif_priv_data(env);
+    char name[256];
+
+    if(!enif_get_string(env, argv[0], name, sizeof(name), ERL_NIF_LATIN1)) {
+        return enif_make_badarg(env);
+    }
+
+    // Check for duplicate name
+    domain_node_t *current = context->domain_list;
+    while (current) {
+        if (strcmp(current->name, name) == 0) {
+            return enif_make_atom(env, "error");
+        }
+        current = current->next;
+    }
+
+    ec_domain_t *domain = ecrt_master_create_domain(context->master);
     if (!domain) return enif_make_atom(env, "error");
+
+    domain_node_t *new_node = enif_alloc(sizeof(domain_node_t));
+    if (!new_node) {
+        // unmap domain?
+        if (!domain) return enif_make_atom(env, "error");
+    }
+
+    strcpy(new_node->name, name);
+    new_node->domain = domain;
+    new_node->next = context->domain_list;
+    context->domain_list = new_node;
+
     return enif_make_atom(env, "ok");
 }
 
+static ERL_NIF_TERM nif_master_remove_domain(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    ethercat_context_t *context = (ethercat_context_t *)enif_priv_data(env);
+    char name[256];
+
+    if (!enif_get_string(env, argv[0], name, sizeof(name), ERL_NIF_LATIN1)) {
+        return enif_make_badarg(env);
+    }
+
+    domain_node_t *current = context->domain_list;
+    domain_node_t *prev = NULL;
+
+    while (current) {
+        if (strcmp(current->name, name) == 0) {
+            if (prev) {
+                prev->next = current->next;
+            } else {
+                context->domain_list = current->next;
+            }
+
+            enif_free(current);
+            return enif_make_atom(env, "ok");
+        }
+        current = current->next;
+    }
+    return enif_make_atom(env, "error");
+}
+
+/*
 static ERL_NIF_TERM nif_master_slave_config(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
     if (!master) return enif_make_atom(env, "error");
     unsigned int alias, position, vendor_id, product_code;
@@ -72,30 +143,34 @@ static ERL_NIF_TERM nif_slave_config_pdos(ErlNifEnv* env, int argc, const ERL_NI
     }
     return enif_make_atom(env, "ok");
 }
+*/
 
 static ERL_NIF_TERM nif_master_activate(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
-    if (ecrt_master_activate(master)) enif_make_atom(env, "error");
+    ethercat_context_t *context = (ethercat_context_t *)enif_priv_data(env);
+    if (ecrt_master_activate(context->master)) enif_make_atom(env, "error");
+    return enif_make_atom(env, "ok");
+}
+
+static ERL_NIF_TERM nif_queue_all_domains(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    ethercat_context_t *context = (ethercat_context_t *)enif_priv_data(env);
+
+    domain_node_t *current = context->domain_list;
+    while (current) {
+        ecrt_domain_queue(current->domain);
+        current = current->next;
+    }
+
+    ecrt_master_send(context->master);
     return enif_make_atom(env, "ok");
 }
 
 static ERL_NIF_TERM nif_master_send(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
-    ecrt_domain_queue(domain);
-    ecrt_master_send(master);
+    ethercat_context_t *context = (ethercat_context_t *)enif_priv_data(env);
+    ecrt_master_send(context->master);
     return enif_make_atom(env, "ok");
 }
 
-static ERL_NIF_TERM nif_master_receive(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
-    ecrt_master_receive(master);
-    ecrt_domain_process(domain);
-    return enif_make_atom(env, "ok");
-}
-
-static ERL_NIF_TERM nif_master_state(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
-    ecrt_master_state(master, &master_state);
-    return enif_make_atom(env, "ok");
-}
-
-void check_domain_state(const ec_domain_t *domain, ErlNifEnv* env) {
+bool check_domain_state(const ec_domain_t *domain, ErlNifEnv* env) {
     ec_domain_state_t ds;
 
     ecrt_domain_state(domain, &ds);
@@ -106,40 +181,67 @@ void check_domain_state(const ec_domain_t *domain, ErlNifEnv* env) {
     EC_WC_COMPLETE      All registered process data were exchanged
     */
     // TODO  && domain->working_counter_changes check if domain changed
-    if (ds.wc_state == EC_WC_COMPLETE) {
-        ERL_NIF_TERM message = enif_make_string(env, "this is a test", ERL_NIF_LATIN1);
-        enif_send(NULL, &caller_pid, env, message);
-    }
+    return ds.wc_state == EC_WC_COMPLETE;
 }
 
 static ERL_NIF_TERM nif_cyclic_task(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    ethercat_context_t *context = (ethercat_context_t *)enif_priv_data(env);
     while (1) {
+        ecrt_master_receive(context->master);
 
-        ecrt_master_receive(master);
+        domain_node_t *current = context->domain_list;
+        while (current) {
+            ecrt_domain_process(current->domain);
+            if (check_domain_state(current->domain, env)) {
+                ERL_NIF_TERM message = enif_make_string(env, "this is a test", ERL_NIF_LATIN1);
+                enif_send(env, context->caller_pid, env, message);
+            }
+            current = current->next;
+        }
 
-        // TODO foreach domain
-        ecrt_domain_process(domain);
-        check_domain_state(domain, env);
     }
     return enif_make_atom(env, "ok");
 }
 
+static int load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM info) {
+    ethercat_context_t *context = enif_alloc(sizeof(ethercat_context_t));
+    if (!context) {
+        return -1;
+    }
+
+    context->caller_pid = NULL;
+    context->master = NULL;
+    context->domain_list = NULL;
+    *priv_data = context;
+    return 0;
+}
+
 static void unload(ErlNifEnv* env, void* priv_data) {
-    if (master) ecrt_release_master(master);
+    ethercat_context_t *context = (ethercat_context_t *)priv_data;
+
+    domain_node_t *current = context->domain_list;
+    while (current) {
+        //ecrt_domain_unmap
+        domain_node_t *next = current->next;
+        enif_free(current);
+        current = next;
+    }
+
+    ecrt_release_master(context->master);
+    enif_free(context);
 }
 
 // NIF definition
 static ErlNifFunc nif_funcs[] = {
-    {"configure", 0, nif_configure},
-    {"request_master", 0, nif_request_master},
-    {"master_create_domain", 0, nif_master_create_domain},
-    {"master_slave_config", 4, nif_master_slave_config},
-    {"slave_config_pdos", 1, nif_slave_config_pdos},
+    {"request_master", 1, nif_request_master},
+    {"master_create_domain", 1, nif_master_create_domain},
+    {"master_remove_domain", 1, nif_master_remove_domain},
+    //{"master_slave_config", 4, nif_master_slave_config},
+    //{"slave_config_pdos", 1, nif_slave_config_pdos},
     {"master_activate", 0, nif_master_activate},
+    {"master_queue_all_domains", 0, nif_queue_all_domains},
     {"master_send", 0, nif_master_send},
-    {"master_receive", 0, nif_master_receive},
-    {"master_state", 0, nif_master_state},
     {"run", 0, nif_cyclic_task, ERL_NIF_DIRTY_JOB_IO_BOUND}
 };
 
-ERL_NIF_INIT(Elixir.EthercatEx.Nif, nif_funcs, NULL, NULL, NULL, unload)
+ERL_NIF_INIT(Elixir.EthercatEx.Nif, nif_funcs, load, NULL, NULL, unload)

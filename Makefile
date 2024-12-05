@@ -8,7 +8,10 @@ CFLAGS = -fPIC -I$(ERTS_INCLUDE_DIR) -I$(C_SRC_DIR) -O2 -Wall
 CC ?= $(CROSSCOMPILE)-gcc
 
 # Targets
-all: $(NIF_LIB) $(FAKE_NIF_LIB)
+all: $(NIF_LIB) $(FAKE_NIF_LIB_IF_NO_CROSSCOMPILE)
+
+# Define FAKE_NIF_LIB_IF_NO_CROSSCOMPILE based on CROSSCOMPILE variable
+FAKE_NIF_LIB_IF_NO_CROSSCOMPILE := $(if $(CROSSCOMPILE), , $(FAKE_NIF_LIB))
 
 $(NIF_LIB): $(C_SRC_DIR)/ethercat_nif.c
 	@mkdir -p $(PRIV_DIR)

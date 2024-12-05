@@ -17,6 +17,8 @@ defmodule EthercatEx.Nif do
   def master_create_domain(_name), do: :erlang.nif_error(:nif_not_loaded)
   def master_remove_domain(_name), do: :erlang.nif_error(:nif_not_loaded)
 
+  def master_get_slave(_index), do: :erlang.nif_error(:nif_not_loaded)
+
   def master_slave_config(_alias, _position, _vendor_id, _product_code),
     do: :erlang.nif_error(:nif_not_loaded)
 

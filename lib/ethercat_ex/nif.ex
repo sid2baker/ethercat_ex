@@ -1,10 +1,12 @@
 defmodule EthercatEx.Nif do
   @moduledoc false
 
+  @nif_lib_name Application.compile_env(:ethercat_ex, :nif_lib_name)
+
   @on_load :load_nif
   def load_nif do
     nif_file =
-      Path.join([:code.priv_dir(:ethercat_ex), Application.get_env(:ethercat_ex, :nif_file)])
+      Path.join([:code.priv_dir(:ethercat_ex), @nif_lib_name])
 
     case :erlang.load_nif(nif_file, 0) do
       :ok -> :ok

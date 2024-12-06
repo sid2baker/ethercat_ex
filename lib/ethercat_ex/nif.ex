@@ -13,7 +13,7 @@ defmodule EthercatEx.Nif do
     end
   end
 
-  def request_master(_caller_pid), do: :erlang.nif_error(:nif_not_loaded)
+  def request_master(), do: :erlang.nif_error(:nif_not_loaded)
   def master_create_domain(_name), do: :erlang.nif_error(:nif_not_loaded)
   def master_remove_domain(_name), do: :erlang.nif_error(:nif_not_loaded)
 

@@ -15,13 +15,13 @@ defmodule EthernetEx.NifTest do
   end
 
   test "adding domain" do
-    :ok = EthercatEx.Nif.request_master(self())
+    :ok = EthercatEx.Nif.request_master()
     :ok = EthercatEx.Nif.master_create_domain(~c"test")
     :ok = EthercatEx.Nif.master_remove_domain(~c"test")
   end
 
   test "remove not added domain" do
-    :ok = EthercatEx.Nif.request_master(self())
+    :ok = EthercatEx.Nif.request_master()
     :error = EthercatEx.Nif.master_remove_domain(~c"test")
   end
 end

@@ -264,7 +264,7 @@ static void unload(ErlNifEnv* env, void* priv_data) {
 
 // NIF definition
 static ErlNifFunc nif_funcs[] = {
-    {"request_master", 1, nif_request_master},
+    {"request_master", 0, nif_request_master},
     {"master_create_domain", 1, nif_master_create_domain},
     {"master_remove_domain", 1, nif_master_remove_domain},
     {"master_get_slave", 1, nif_master_get_slave},

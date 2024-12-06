@@ -1,25 +1,54 @@
-# Variables
-C_SRC_DIR = c_src
-PRIV_DIR = priv
-NIF_LIB = $(PRIV_DIR)/ethercat_nif.so
-FAKE_NIF_LIB = $(PRIV_DIR)/fakeethercat_nif.so
+PREFIX = $(MIX_APP_PATH)/priv
+BUILD = $(MIX_APP_PATH)/obj
 
-CFLAGS = -fPIC -I$(ERTS_INCLUDE_DIR) -I$(C_SRC_DIR) -O2 -Wall
+DEFAULT_TARGETS ?= $(PREFIX) $(PREFIX)/ethercat_nif.so
+
+ERL_CFLAGS ?= -I$(ERTS_INCLUDE_DIR)
+CFLAGS ?= -O2 -Wall -Wextra -Wno-unused-parameter -pedantic -std=gnu99
 CC ?= $(CROSSCOMPILE)-gcc
 
-# Targets
-all: $(NIF_LIB) $(FAKE_NIF_LIB_IF_NO_CROSSCOMPILE)
+# Enable for debug messages
+# CFLAGS += -DDEBUG
 
-# Define FAKE_NIF_LIB_IF_NO_CROSSCOMPILE based on CROSSCOMPILE variable
-FAKE_NIF_LIB_IF_NO_CROSSCOMPILE := $(if $(CROSSCOMPILE), , $(FAKE_NIF_LIB))
+ifeq ($(origin CROSSCOMPILE), undefined)
+	LDFLAGS += -lfakeethercat -lethercat
+else
+	LDFLAGS += -lethercat
+endif
 
-$(NIF_LIB): $(C_SRC_DIR)/ethercat_nif.c
-	@mkdir -p $(PRIV_DIR)
-	$(CC) $(CFLAGS) -o $(NIF_LIB) $(C_SRC_DIR)/ethercat_nif.c -lethercat -shared
+ifeq ($(MIX_ENV),test)
+	DEFAULT_TARGETS += $(PREFIX)/fakeethercat_nif.so
+endif
 
-$(FAKE_NIF_LIB): $(C_SRC_DIR)/ethercat_nif.c
-	@mkdir -p $(PRIV_DIR)
-	$(CC) $(CFLAGS) -o $(FAKE_NIF_LIB) $(C_SRC_DIR)/ethercat_nif.c -lfakeethercat -lethercat -shared
+
+calling_from_make:
+	mix compile
+
+all: install
+
+install: $(BUILD) $(DEFAULT_TARGETS)
+
+$(BUILD)/%.o: c_src/%.c
+	@echo " CC $(notdir $@)"
+	$(CC) -c $(ERL_CFLAGS) $(CFLAGS) -o $@ $<
+
+$(PREFIX)/ethercat_nif.so: $(BUILD)/ethercat_nif.o
+	@echo " LD $(notdir $@)"
+	$(CC) $^ -shared  $(ERL_LDFLAGS) $(LDFLAGS) -o $@
+	$(call update_perms, $@)
+
+$(PREFIX)/fakeethercat_nif.so: $(BUILD)/ethercat_nif.o
+	@echo " LD $(notdir $@)"
+	$(CC) $^ -shared  $(ERL_LDFLAGS) $(LDFLAGS) -o $@
+	$(call update_perms, $@)
+
+$(PREFIX) $(BUILD):
+	mkdir -p $@
+
+mix_clean:
+	$(RM) $(PREFIX)/* $(BUILD)/*
 
 clean:
-	rm -rf $(PRIV_DIR)
+	mix clean
+
+.PHONY: all clean mix_clean calling_from_make install

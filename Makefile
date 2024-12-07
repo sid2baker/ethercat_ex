@@ -20,7 +20,6 @@ ifeq ($(MIX_ENV),test)
 	DEFAULT_TARGETS += $(PREFIX)/fakeethercat_nif.so
 endif
 
-
 calling_from_make:
 	mix compile
 

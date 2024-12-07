@@ -17,12 +17,23 @@ defmodule EthercatEx.MixProject do
 
   def application do
     [
+      env: [
+        nif_lib_name: nif_lib_name()
+      ],
       extra_applications: [:logger]
     ]
   end
 
   defp elixirc_paths(:test), do: elixirc_paths(:dev) ++ ["test/support"]
   defp elixirc_paths(_), do: ["lib"]
+
+  defp nif_lib_name do
+    if Mix.env() == :test do
+      "fakeethercat_nif"
+    else
+      "ethercat_nif"
+    end
+  end
 
   defp deps do
     [

@@ -1,33 +1,59 @@
 defmodule EthercatEx.Nif do
   @moduledoc false
+  use Zig,
+    otp_app: :zigler,
+    c: [
+      include_dirs: "/usr/include/",
+      link_lib: {:system, "fakeethercat"}
+    ],
+    nifs: [
+      request_master: [],
+      master_create_domain: []
+    ],
+    resources: [
+      :MasterResource,
+      :DomainResource
+    ]
 
-  @on_load :load_nif
-  def load_nif do
-    nif_lib_name = Application.get_env(:ethercat_ex, :nif_lib_name)
-    nif_file = Path.join([:code.priv_dir(:ethercat_ex), nif_lib_name])
+  ~Z"""
+  const beam = @import("beam");
+  const root = @import("root");
+  const ecrt = @cImport(@cInclude("ecrt.h"));
 
-    case :erlang.load_nif(nif_file, 0) do
-      :ok -> :ok
-      {:error, {:reload, _}} -> :ok
-      {:error, reason} -> IO.puts("Failed to load nif: #{inspect(reason)}")
-    end
-  end
+  pub const MasterResource = beam.Resource(*ecrt.ec_master_t, root, .{});
+  pub const DomainResource = beam.Resource(*ecrt.ec_domain_t, root, .{});
 
-  def request_master(), do: :erlang.nif_error(:nif_not_loaded)
-  def master_create_domain(_name), do: :erlang.nif_error(:nif_not_loaded)
-  def master_remove_domain(_name), do: :erlang.nif_error(:nif_not_loaded)
+  const MasterError = error{
+    MasterNotFound,
+  };
 
-  def master_get_slave(_index), do: :erlang.nif_error(:nif_not_loaded)
+  pub fn request_master() !MasterResource {
+    const master = ecrt.ecrt_request_master(0) orelse return MasterError.MasterNotFound;
+    return MasterResource.create(master, .{});
+  }
 
-  def master_slave_config(_alias, _position, _vendor_id, _product_code),
-    do: :erlang.nif_error(:nif_not_loaded)
+  pub fn master_create_domain(master: beam.term) !DomainResource {
+    const m = try beam.get(MasterResource, master, .{});
+    const domain = ecrt.ecrt_master_create_domain(m.unpack()) orelse return MasterError.MasterNotFound;
+    return DomainResource.create(domain, .{});
+  }
+  """
 
-  def slave_config_pdos(_config), do: :erlang.nif_error(:nif_not_loaded)
-  def master_activate, do: :erlang.nif_error(:nif_not_loaded)
-  def master_queue_all_domains, do: :erlang.nif_error(:nif_not_laded)
+  # def request_master(), do: :erlang.nif_error(:nif_not_loaded)
+  # def master_create_domain(_name), do: :erlang.nif_error(:nif_not_loaded)
+  # def master_remove_domain(_name), do: :erlang.nif_error(:nif_not_loaded)
 
-  def master_send, do: :erlang.nif_error(:nif_not_loaded)
-  def run, do: :erlang.nif_error(:nif_not_loaded)
+  # def master_get_slave(_index), do: :erlang.nif_error(:nif_not_loaded)
+
+  # def master_slave_config(_alias, _position, _vendor_id, _product_code),
+  #   do: :erlang.nif_error(:nif_not_loaded)
+
+  # def slave_config_pdos(_config), do: :erlang.nif_error(:nif_not_loaded)
+  # def master_activate, do: :erlang.nif_error(:nif_not_loaded)
+  # def master_queue_all_domains, do: :erlang.nif_error(:nif_not_laded)
+
+  # def master_send, do: :erlang.nif_error(:nif_not_loaded)
+  # def run, do: :erlang.nif_error(:nif_not_loaded)
 
   # Add additional Elixir wrappers for NIF functions
 end

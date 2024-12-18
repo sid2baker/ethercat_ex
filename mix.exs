@@ -9,10 +9,7 @@ defmodule EthercatEx.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      compilers: [:elixir_make] ++ Mix.compilers(),
-      make_targets: ["all"],
-      make_clean: ["mix_clean"],
-      make_error_message: ""
+      compilers: Mix.compilers()
     ]
   end
 
@@ -33,7 +30,7 @@ defmodule EthercatEx.MixProject do
 
   defp deps do
     [
-      {:elixir_make, "~> 0.9", runtime: false}
+      {:zigler, "~> 0.13.2", runtime: false}
     ]
   end
 end

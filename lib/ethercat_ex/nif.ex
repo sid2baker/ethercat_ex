@@ -8,7 +8,9 @@ defmodule EthercatEx.Nif do
     ],
     nifs: [
       request_master: [],
-      master_create_domain: []
+      master_create_domain: [],
+      master_reset: [],
+      release_master: []
     ],
     resources: [
       :MasterResource,
@@ -31,6 +33,7 @@ defmodule EthercatEx.Nif do
 
   const MasterError = error{
       MasterNotFound,
+      ResetError,
   };
 
   pub fn request_master() !MasterResource {
@@ -42,6 +45,19 @@ defmodule EthercatEx.Nif do
       const m = try beam.get(MasterResource, master, .{});
       const domain = ecrt.ecrt_master_create_domain(m.unpack()) orelse return MasterError.MasterNotFound;
       return DomainResource.create(domain, .{});
+  }
+
+  pub fn master_reset(master: beam.term) !void {
+      const m = try beam.get(MasterResource, master, .{});
+      const result = ecrt.ecrt_master_reset(m.unpack());
+      if (result != 0) {
+          return MasterError.ResetError;
+      }
+  }
+
+  pub fn release_master(master: beam.term) !void {
+      const m = try beam.get(MasterResource, master, .{});
+      ecrt.ecrt_release_master(m.unpack());
   }
   """
 

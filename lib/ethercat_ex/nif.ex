@@ -4,13 +4,15 @@ defmodule EthercatEx.Nif do
     otp_app: :zigler,
     c: [
       include_dirs: "/usr/include/",
-      link_lib: {:system, "fakeethercat"}
+      link_lib: [{:system, "fakeethercat"}, {:system, "ethercat"}]
     ],
     nifs: [
+      version_magic: [],
       request_master: [],
       master_create_domain: [],
       master_reset: [],
-      release_master: []
+      release_master: [],
+      master_get_slave: []
     ],
     resources: [
       :MasterResource,
@@ -34,7 +36,12 @@ defmodule EthercatEx.Nif do
   const MasterError = error{
       MasterNotFound,
       ResetError,
+      GetSlaveError,
   };
+
+  pub fn version_magic() !u32 {
+      return ecrt.ecrt_version_magic();
+  }
 
   pub fn request_master() !MasterResource {
       const master = ecrt.ecrt_request_master(0) orelse return MasterError.MasterNotFound;
@@ -45,6 +52,16 @@ defmodule EthercatEx.Nif do
       const m = try beam.get(MasterResource, master, .{});
       const domain = ecrt.ecrt_master_create_domain(m.unpack()) orelse return MasterError.MasterNotFound;
       return DomainResource.create(domain, .{});
+  }
+
+  pub fn master_get_slave(master: beam.term, slave_position: u16) !beam.term {
+      const m = try beam.get(MasterResource, master, .{});
+      var slave_info: ecrt.ec_slave_info_t = undefined;
+      const result = ecrt.ecrt_master_get_slave(m.unpack(), slave_position, &slave_info);
+      if (result != 0) {
+          return MasterError.GetSlaveError;
+      }
+      return beam.make(slave_info, .{});
   }
 
   pub fn master_reset(master: beam.term) !void {

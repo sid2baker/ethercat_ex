@@ -20,22 +20,28 @@ defmodule EthercatEx.Nif do
   const root = @import("root");
   const ecrt = @cImport(@cInclude("ecrt.h"));
 
-  pub const MasterResource = beam.Resource(*ecrt.ec_master_t, root, .{});
+  pub const MasterResource = beam.Resource(*ecrt.ec_master_t, root, .{ .Callbacks = MasterResourceCallbacks });
   pub const DomainResource = beam.Resource(*ecrt.ec_domain_t, root, .{});
 
+  pub const MasterResourceCallbacks = struct {
+      pub fn dtor(s: **ecrt.ec_master_t) void {
+          ecrt.ecrt_release_master(s.*);
+      }
+  };
+
   const MasterError = error{
-    MasterNotFound,
+      MasterNotFound,
   };
 
   pub fn request_master() !MasterResource {
-    const master = ecrt.ecrt_request_master(0) orelse return MasterError.MasterNotFound;
-    return MasterResource.create(master, .{});
+      const master = ecrt.ecrt_request_master(0) orelse return MasterError.MasterNotFound;
+      return MasterResource.create(master, .{});
   }
 
   pub fn master_create_domain(master: beam.term) !DomainResource {
-    const m = try beam.get(MasterResource, master, .{});
-    const domain = ecrt.ecrt_master_create_domain(m.unpack()) orelse return MasterError.MasterNotFound;
-    return DomainResource.create(domain, .{});
+      const m = try beam.get(MasterResource, master, .{});
+      const domain = ecrt.ecrt_master_create_domain(m.unpack()) orelse return MasterError.MasterNotFound;
+      return DomainResource.create(domain, .{});
   }
   """
 

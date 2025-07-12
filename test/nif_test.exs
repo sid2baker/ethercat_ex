@@ -14,14 +14,20 @@ defmodule EthernetEx.NifTest do
     :ok
   end
 
-  test "adding domain" do
-    :ok = EthercatEx.Nif.request_master()
-    :ok = EthercatEx.Nif.master_create_domain(~c"test")
-    :ok = EthercatEx.Nif.master_remove_domain(~c"test")
+  test "get version" do
+    version = EthercatEx.Nif.version_magic()
+    assert is_integer(version)
   end
 
-  test "remove not added domain" do
-    :ok = EthercatEx.Nif.request_master()
-    :error = EthercatEx.Nif.master_remove_domain(~c"test")
+  test "create master" do
+    master = EthercatEx.Nif.request_master()
+    assert is_reference(master)
+  end
+
+  test "adding domain" do
+    master = EthercatEx.Nif.request_master()
+    domain = EthercatEx.Nif.master_create_domain(master)
+    assert is_reference(master)
+    assert is_reference(domain)
   end
 end

@@ -4,7 +4,12 @@ defmodule EthercatEx.Nif do
     otp_app: :zigler,
     c: [
       include_dirs: "/usr/include/",
-      link_lib: [{:system, "fakeethercat"}, {:system, "ethercat"}]
+      link_lib:
+        if Mix.env() == :test do
+          [{:system, "fakeethercat"}, {:system, "ethercat"}]
+        else
+          {:system, "ethercat"}
+        end
     ],
     nifs: [
       version_magic: [],

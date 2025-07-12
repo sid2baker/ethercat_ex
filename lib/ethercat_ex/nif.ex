@@ -25,6 +25,7 @@ defmodule EthercatEx.Nif do
     ]
 
   ~Z"""
+  const std = @import("std");
   const beam = @import("beam");
   const root = @import("root");
   const ecrt = @cImport(@cInclude("ecrt.h"));
@@ -34,6 +35,7 @@ defmodule EthercatEx.Nif do
 
   pub const MasterResourceCallbacks = struct {
       pub fn dtor(s: **ecrt.ec_master_t) void {
+          std.debug.print("dtor called: {}\n", .{s.*});
           ecrt.ecrt_release_master(s.*);
       }
   };
@@ -50,36 +52,35 @@ defmodule EthercatEx.Nif do
 
   pub fn request_master() !MasterResource {
       const master = ecrt.ecrt_request_master(0) orelse return MasterError.MasterNotFound;
-      return MasterResource.create(master, .{});
+      return MasterResource.create(master, .{.released = false});
   }
 
-  pub fn master_create_domain(master: beam.term) !DomainResource {
-      const m = try beam.get(MasterResource, master, .{});
-      const domain = ecrt.ecrt_master_create_domain(m.unpack()) orelse return MasterError.MasterNotFound;
+  pub fn master_create_domain(master: MasterResource) !DomainResource {
+      const domain = ecrt.ecrt_master_create_domain(master.unpack()) orelse return MasterError.MasterNotFound;
       return DomainResource.create(domain, .{});
   }
 
-  pub fn master_get_slave(master: beam.term, slave_position: u16) !beam.term {
-      const m = try beam.get(MasterResource, master, .{});
+  pub fn master_get_slave(master: MasterResource, slave_position: u16) !beam.term {
       var slave_info: ecrt.ec_slave_info_t = undefined;
-      const result = ecrt.ecrt_master_get_slave(m.unpack(), slave_position, &slave_info);
+      const result = ecrt.ecrt_master_get_slave(master.unpack(), slave_position, &slave_info);
       if (result != 0) {
           return MasterError.GetSlaveError;
       }
       return beam.make(slave_info, .{});
   }
 
-  pub fn master_reset(master: beam.term) !void {
-      const m = try beam.get(MasterResource, master, .{});
-      const result = ecrt.ecrt_master_reset(m.unpack());
+  pub fn master_reset(master: MasterResource) !void {
+      const result = ecrt.ecrt_master_reset(master.unpack());
       if (result != 0) {
           return MasterError.ResetError;
       }
   }
 
-  pub fn release_master(master: beam.term) !void {
-      const m = try beam.get(MasterResource, master, .{});
-      ecrt.ecrt_release_master(m.unpack());
+  pub fn release_master(master: MasterResource) !void {
+      // TODO check if master.release needs to be called
+      ecrt.ecrt_release_master(master.unpack());
+      master.release();
+      std.debug.print("Master released: {}\n", .{master.unpack()});
   }
   """
 

@@ -30,4 +30,17 @@ defmodule EthernetEx.NifTest do
     assert is_reference(master)
     assert is_reference(domain)
   end
+
+  test "add domain to released master" do
+    master = EthercatEx.Nif.request_master()
+    EthercatEx.Nif.release_master(master)
+    EthercatEx.Nif.master_create_domain(master)
+  end
+
+  @tag :focus
+  test "release already released master" do
+    master = EthercatEx.Nif.request_master()
+    EthercatEx.Nif.release_master(master)
+    EthercatEx.Nif.release_master(master)
+  end
 end

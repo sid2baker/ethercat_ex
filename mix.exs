@@ -30,7 +30,7 @@ defmodule EthercatEx.MixProject do
 
   defp deps do
     [
-      {:zigler, "~> 0.13.2", runtime: false}
+      {:zigler, "~> 0.14.1", runtime: false}
     ]
   end
 end

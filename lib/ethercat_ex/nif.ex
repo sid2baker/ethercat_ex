@@ -14,6 +14,7 @@ defmodule EthercatEx.Nif do
     nifs: [
       version_magic: [],
       request_master: [],
+      master_state: [],
       master_create_domain: [],
       master_reset: [],
       release_master: [],
@@ -46,6 +47,14 @@ defmodule EthercatEx.Nif do
       GetSlaveError,
   };
 
+  // this is needed since zig doesn't support bitfields. See https://github.com/ziglang/zig/issues/1499
+  const ec_master_state_t = packed struct {
+    slaves_responding: u32, // 32 bits
+    al_states: u4,         // 4 bits
+    link_up: u1,           // 1 bit
+    padding: u27,          // 27 bits to align to 64 bits (8 bytes)
+  };
+
   pub fn version_magic() !u32 {
       return ecrt.ecrt_version_magic();
   }
@@ -53,6 +62,15 @@ defmodule EthercatEx.Nif do
   pub fn request_master() !MasterResource {
       const master = ecrt.ecrt_request_master(0) orelse return MasterError.MasterNotFound;
       return MasterResource.create(master, .{.released = false});
+  }
+
+  pub fn master_state(master: MasterResource) !beam.term {
+    var state: ec_master_state_t = undefined;
+    const result = ecrt.ecrt_master_state(master.unpack(), @ptrCast(&state));
+    if (result != 0) {
+      return MasterError.MasterNotFound;
+    }
+    return beam.make(state, .{.as = .map});
   }
 
   pub fn master_create_domain(master: MasterResource) !DomainResource {

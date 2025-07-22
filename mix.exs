@@ -24,6 +24,7 @@ defmodule EthercatEx.MixProject do
 
   defp deps do
     [
+      {:muontrap, "~> 1.0"},
       {:zigler, "~> 0.14.1", runtime: false}
     ]
   end

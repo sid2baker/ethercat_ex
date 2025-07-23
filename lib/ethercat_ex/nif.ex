@@ -33,6 +33,7 @@ defmodule EthercatEx.Nif do
 
   pub const MasterResource = beam.Resource(*ecrt.ec_master_t, root, .{ .Callbacks = MasterResourceCallbacks });
   pub const DomainResource = beam.Resource(*ecrt.ec_domain_t, root, .{});
+  pub const SlaveConfigResource = beam.Resource(*ecrt.ec_slave_config_t, root, .{});
 
   pub const MasterResourceCallbacks = struct {
       pub fn dtor(s: **ecrt.ec_master_t) void {
@@ -45,6 +46,7 @@ defmodule EthercatEx.Nif do
       MasterNotFound,
       ResetError,
       GetSlaveError,
+      SlaveConfigError,
   };
 
   // this is needed since zig doesn't support bitfields. See https://github.com/ziglang/zig/issues/1499
@@ -78,6 +80,11 @@ defmodule EthercatEx.Nif do
       return DomainResource.create(domain, .{});
   }
 
+  pub fn master_slave_config(master: MasterResource, alias: u16, position: u16, vendor_id: u32, product_code: u32) !SlaveConfigResource {
+      const slave_config = ecrt.ecrt_master_slave_config(master.unpack(), alias, position, vendor_id, product_code) orelse return MasterError.SlaveConfigError;
+      return SlaveConfigResource.create(slave_config, .{});
+  }
+
   pub fn master_get_slave(master: MasterResource, slave_position: u16) !beam.term {
       var slave_info: ecrt.ec_slave_info_t = undefined;
       const result = ecrt.ecrt_master_get_slave(master.unpack(), slave_position, &slave_info);
@@ -101,22 +108,4 @@ defmodule EthercatEx.Nif do
       std.debug.print("Master released: {}\n", .{master.unpack()});
   }
   """
-
-  # def request_master(), do: :erlang.nif_error(:nif_not_loaded)
-  # def master_create_domain(_name), do: :erlang.nif_error(:nif_not_loaded)
-  # def master_remove_domain(_name), do: :erlang.nif_error(:nif_not_loaded)
-
-  # def master_get_slave(_index), do: :erlang.nif_error(:nif_not_loaded)
-
-  # def master_slave_config(_alias, _position, _vendor_id, _product_code),
-  #   do: :erlang.nif_error(:nif_not_loaded)
-
-  # def slave_config_pdos(_config), do: :erlang.nif_error(:nif_not_loaded)
-  # def master_activate, do: :erlang.nif_error(:nif_not_loaded)
-  # def master_queue_all_domains, do: :erlang.nif_error(:nif_not_laded)
-
-  # def master_send, do: :erlang.nif_error(:nif_not_loaded)
-  # def run, do: :erlang.nif_error(:nif_not_loaded)
-
-  # Add additional Elixir wrappers for NIF functions
 end

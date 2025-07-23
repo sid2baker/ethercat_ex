@@ -24,7 +24,9 @@ defmodule EthercatEx.Nif do
       release_master: [],
       master_get_slave: [],
       domain_process: [],
-      domain_queue: []
+      domain_queue: [],
+      domain_data: [],
+      domain_state: []
     ],
     resources: [
       :MasterResource,
@@ -135,6 +137,17 @@ defmodule EthercatEx.Nif do
 
   pub fn domain_queue(domain: DomainResource) !void {
       _ = ecrt.ecrt_domain_queue(domain.unpack());
+  }
+
+  pub fn domain_data(domain: DomainResource) ![*c]u8 {
+      const result = ecrt.ecrt_domain_data(domain.unpack());
+      return result;
+  }
+
+  pub fn domain_state(domain: DomainResource) !beam.term {
+      var state: ecrt.ec_domain_state_t = undefined;
+      _ = ecrt.ecrt_domain_state(domain.unpack(), &state);
+      return beam.make(state, .{});
   }
   """
 end

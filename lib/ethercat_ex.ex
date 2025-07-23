@@ -177,4 +177,20 @@ defmodule EthercatEx do
   def attach_monitor(pid) do
     # Allow monitoring of EtherCAT events
   end
+
+  # TODO just for testing
+  alias EthercatEx.Nif
+
+  def master() do
+    master = Nif.request_master()
+    domain = Nif.master_create_domain(master)
+    {master, domain}
+  end
+
+  def cyclic(master, domain) do
+    Nif.master_receive(master)
+    Nif.domain_process(domain)
+    Nif.domain_queue(domain)
+    Nif.master_send(master)
+  end
 end

@@ -14,15 +14,22 @@ defmodule EthercatEx.Nif do
     nifs: [
       version_magic: [],
       request_master: [],
+      master_activate: [],
+      master_receive: [],
+      master_send: [],
       master_state: [],
       master_create_domain: [],
+      master_slave_config: [],
       master_reset: [],
       release_master: [],
-      master_get_slave: []
+      master_get_slave: [],
+      domain_process: [],
+      domain_queue: []
     ],
     resources: [
       :MasterResource,
-      :DomainResource
+      :DomainResource,
+      :SlaveConfigResource
     ]
 
   ~Z"""
@@ -47,6 +54,7 @@ defmodule EthercatEx.Nif do
       ResetError,
       GetSlaveError,
       SlaveConfigError,
+      ActivateError,
   };
 
   // this is needed since zig doesn't support bitfields. See https://github.com/ziglang/zig/issues/1499
@@ -64,6 +72,19 @@ defmodule EthercatEx.Nif do
   pub fn request_master() !MasterResource {
       const master = ecrt.ecrt_request_master(0) orelse return MasterError.MasterNotFound;
       return MasterResource.create(master, .{.released = false});
+  }
+
+  pub fn master_activate(master: MasterResource) !void {
+      const result = ecrt.ecrt_master_activate(master.unpack());
+      if (result != 0) return MasterError.ActivateError;
+  }
+
+  pub fn master_receive(master: MasterResource) !void {
+      _ = ecrt.ecrt_master_receive(master.unpack());
+  }
+
+  pub fn master_send(master: MasterResource) !void {
+      _ = ecrt.ecrt_master_send(master.unpack());
   }
 
   pub fn master_state(master: MasterResource) !beam.term {
@@ -106,6 +127,14 @@ defmodule EthercatEx.Nif do
       ecrt.ecrt_release_master(master.unpack());
       master.release();
       std.debug.print("Master released: {}\n", .{master.unpack()});
+  }
+
+  pub fn domain_process(domain: DomainResource) !void {
+      _ = ecrt.ecrt_domain_process(domain.unpack());
+  }
+
+  pub fn domain_queue(domain: DomainResource) !void {
+      _ = ecrt.ecrt_domain_queue(domain.unpack());
   }
   """
 end

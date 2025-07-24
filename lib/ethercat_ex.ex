@@ -193,4 +193,12 @@ defmodule EthercatEx do
     Nif.domain_queue(domain)
     Nif.master_send(master)
   end
+
+  def slaves(master) do
+    %{slaves_responding: num_slaves} = Nif.master_state(master)
+
+    Enum.map(0..num_slaves, fn slave ->
+      Nif.master_get_slave(master, slave)
+    end)
+  end
 end

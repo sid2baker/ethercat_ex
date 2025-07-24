@@ -26,7 +26,13 @@ defmodule EthercatEx.Nif do
       domain_process: [],
       domain_queue: [],
       domain_data: [],
-      domain_state: []
+      domain_state: [],
+      slave_config_sync_manager: [],
+      slave_config_pdo_assign_add: [],
+      slave_config_pdo_assign_clear: [],
+      slave_config_pdo_mapping_add: [],
+      slave_config_pdo_mapping_clear: [],
+      slave_config_reg_pdo_entry: []
     ],
     resources: [
       :MasterResource,
@@ -57,6 +63,7 @@ defmodule EthercatEx.Nif do
       GetSlaveError,
       SlaveConfigError,
       ActivateError,
+      PdoRegError,
   };
 
   // this is needed since zig doesn't support bitfields. See https://github.com/ziglang/zig/issues/1499
@@ -148,6 +155,36 @@ defmodule EthercatEx.Nif do
       var state: ecrt.ec_domain_state_t = undefined;
       _ = ecrt.ecrt_domain_state(domain.unpack(), &state);
       return beam.make(state, .{});
+  }
+
+  pub fn slave_config_sync_manager(slave_config: SlaveConfigResource, sync_index: u8, direction: ecrt.ec_direction_t, watchdog_mode: ecrt.ec_watchdog_mode_t) !void {
+      _ = ecrt.ecrt_slave_config_sync_manager(slave_config.unpack(), sync_index, direction, watchdog_mode);
+  }
+
+  pub fn slave_config_pdo_assign_add(slave_config: SlaveConfigResource, sync_index: u8, index: u16) !void {
+    _ = ecrt.ecrt_slave_config_pdo_assign_add(slave_config.unpack(), sync_index, index);
+  }
+
+  pub fn slave_config_pdo_assign_clear(slave_config: SlaveConfigResource, sync_index: u8) !void {
+      _ = ecrt.ecrt_slave_config_pdo_assign_clear(slave_config.unpack(), sync_index);
+  }
+
+  pub fn slave_config_pdo_mapping_add(slave_config: SlaveConfigResource, pdo_index: u16, entry_index: u16, entry_subindex: u8, entry_bit_length: u8) !void {
+      _ = ecrt.ecrt_slave_config_pdo_mapping_add(slave_config.unpack(), pdo_index, entry_index, entry_subindex, entry_bit_length);
+  }
+
+  pub fn slave_config_pdo_mapping_clear(slave_config: SlaveConfigResource, pdo_index: u16) !void {
+      _ = ecrt.ecrt_slave_config_pdo_mapping_clear(slave_config.unpack(), pdo_index);
+  }
+
+  pub fn slave_config_reg_pdo_entry(slave_config: SlaveConfigResource, entry_index: u16, entry_subindex: u8, domain: DomainResource) !u32 {
+      var bit_position: c_uint = 0;
+      const result: c_int = ecrt.ecrt_slave_config_reg_pdo_entry(slave_config.unpack(), entry_index, entry_subindex, domain.unpack(), &bit_position);
+      if (result >= 0) {
+        return @as(u32, @intCast(result));
+      } else {
+        return MasterError.PdoRegError;
+      }
   }
   """
 end

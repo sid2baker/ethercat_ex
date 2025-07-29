@@ -32,7 +32,8 @@ defmodule EthercatEx.Nif do
       slave_config_pdo_assign_clear: [],
       slave_config_pdo_mapping_add: [],
       slave_config_pdo_mapping_clear: [],
-      slave_config_reg_pdo_entry: []
+      slave_config_reg_pdo_entry: [],
+      master_get_pdo: []
     ],
     resources: [
       :MasterResource,
@@ -185,6 +186,13 @@ defmodule EthercatEx.Nif do
       } else {
         return MasterError.PdoRegError;
       }
+  }
+
+  // TODO: look for further functions to implement which aren't listed in ecrt.h (https://gitlab.com/etherlab.org/ethercat/-/blob/stable-1.6/lib/master.c)
+  pub fn master_get_pdo(master: MasterResource, slave_position: u16, sync_index: u8, pos: u16) !void {
+      var pdo: ecrt.ec_pdo_info_t = undefined;
+      _ = ecrt.ecrt_master_get_pdo(master.unpack(), slave_position, sync_index, pos, &pdo);
+      //return beam.make(pdo, .{});
   }
   """
 end

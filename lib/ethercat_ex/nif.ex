@@ -147,6 +147,15 @@ defmodule EthercatEx.Nif do
       _ = ecrt.ecrt_domain_queue(domain.unpack());
   }
 
+  // since ecrt_domain_data just returns domain->process_data
+  // this should be managed inside zig.
+  // So there should be these functions
+  // get_domain_value(domain, offset, bit_position?)
+  // which returns the current value
+  // set_domain_value(domain, offset, bit_position?, value)
+  // which sets the value
+  // and subscribe_domain_value(domain, offset, bit_position?)
+  // which subscribes to changes of the value
   pub fn domain_data(domain: DomainResource) ![*c]u8 {
       const result = ecrt.ecrt_domain_data(domain.unpack());
       return result;

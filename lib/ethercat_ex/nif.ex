@@ -26,6 +26,7 @@ defmodule EthercatEx.Nif do
       domain_process: [],
       domain_queue: [],
       domain_data: [],
+      get_domain_value: [],
       domain_state: [],
       slave_config_sync_manager: [],
       slave_config_pdo_assign_add: [],
@@ -33,6 +34,7 @@ defmodule EthercatEx.Nif do
       slave_config_pdo_mapping_add: [],
       slave_config_pdo_mapping_clear: [],
       slave_config_reg_pdo_entry: [],
+      master_get_sync_manager: [],
       master_get_pdo: []
     ],
     resources: [
@@ -161,6 +163,13 @@ defmodule EthercatEx.Nif do
       return result;
   }
 
+  // TODO add bit_position
+  pub fn get_domain_value(domain: DomainResource, offset: u32) u8 {
+    const data = ecrt.ecrt_domain_data(domain.unpack());
+    std.debug.print("Byte 0: {}, Byte 1: {}\n", .{data[0], data[1]});
+    return data[offset];
+  }
+
   pub fn domain_state(domain: DomainResource) !beam.term {
       var state: ecrt.ec_domain_state_t = undefined;
       _ = ecrt.ecrt_domain_state(domain.unpack(), &state);
@@ -190,6 +199,9 @@ defmodule EthercatEx.Nif do
   pub fn slave_config_reg_pdo_entry(slave_config: SlaveConfigResource, entry_index: u16, entry_subindex: u8, domain: DomainResource) !u32 {
       var bit_position: c_uint = 0;
       const result: c_int = ecrt.ecrt_slave_config_reg_pdo_entry(slave_config.unpack(), entry_index, entry_subindex, domain.unpack(), &bit_position);
+      if (bit_position != 0) {
+        std.debug.print("Bit Position: {}\n", .{bit_position});
+      }
       if (result >= 0) {
         return @as(u32, @intCast(result));
       } else {
@@ -198,6 +210,13 @@ defmodule EthercatEx.Nif do
   }
 
   // TODO: look for further functions to implement which aren't listed in ecrt.h (https://gitlab.com/etherlab.org/ethercat/-/blob/stable-1.6/lib/master.c)
+  pub fn master_get_sync_manager(master: MasterResource, slave_position: u16, sync_index: u8) !void {
+    var sync: ecrt.ec_sync_info_t = undefined;
+    _ =  ecrt.ecrt_master_get_sync_manager(master.unpack(), slave_position, sync_index, &sync);
+    //return beam.make(sync, .{});
+    std.debug.print("Sync: {}\n", .{sync});
+  }
+
   pub fn master_get_pdo(master: MasterResource, slave_position: u16, sync_index: u8, pos: u16) !void {
       var pdo: ecrt.ec_pdo_info_t = undefined;
       _ = ecrt.ecrt_master_get_pdo(master.unpack(), slave_position, sync_index, pos, &pdo);

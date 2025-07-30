@@ -35,7 +35,8 @@ defmodule EthercatEx.Nif do
       slave_config_pdo_mapping_clear: [],
       slave_config_reg_pdo_entry: [],
       master_get_sync_manager: [],
-      master_get_pdo: []
+      master_get_pdo: [],
+      cyclic_task: [:threaded] # maybe use dirty_cup/dirty_io
     ],
     resources: [
       :MasterResource,
@@ -221,6 +222,26 @@ defmodule EthercatEx.Nif do
       var pdo: ecrt.ec_pdo_info_t = undefined;
       _ = ecrt.ecrt_master_get_pdo(master.unpack(), slave_position, sync_index, pos, &pdo);
       //return beam.make(pdo, .{});
+  }
+
+  // TODO make this flexible to use mulitple domains
+  pub fn cyclic_task(pid: beam.pid, master_resource: MasterResource, domain_resource: DomainResource) !void {
+      const master = master_resource.unpack();
+      const domain = domain_resource.unpack();
+
+      defer {
+        beam.send(pid, .killed, .{}) catch {};
+      }
+
+      while(true) {
+          _ = try beam.send(pid, .unblock, .{});
+          _ = ecrt.ecrt_master_receive(master);
+          _ = ecrt.ecrt_domain_process(domain);
+          // TODO do some stuff here
+          _ = ecrt.ecrt_domain_queue(domain);
+          _ = ecrt.ecrt_master_send(master);
+          try beam.yield();
+      }
   }
   """
 end

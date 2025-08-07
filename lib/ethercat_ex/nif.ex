@@ -73,10 +73,17 @@ defmodule EthercatEx.Nif do
 
   // this is needed since zig doesn't support bitfields. See https://github.com/ziglang/zig/issues/1499
   const ec_master_state_t = packed struct {
-      slaves_responding: u32, // 32 bits
-      al_states: u4, // 4 bits
-      link_up: u1, // 1 bit
+      slaves_responding: u32,
+      al_states: u4,
+      link_up: u1,
       padding: u27, // 27 bits to align to 64 bits (8 bytes)
+  };
+
+  const ec_slave_config_state_t = packed struct {
+      online: u1,
+      operational: u1,
+      al_state: u4,
+      padding: u2, // 2 bits to align to 8 bits (1 byte)
   };
 
   pub fn version_magic() !u32 {
@@ -225,7 +232,7 @@ defmodule EthercatEx.Nif do
       //return beam.make(pdo, .{});
   }
 
-  pub fn cyclic_task(pid: beam.pid, master_resource: MasterResource, domain_resources: []DomainResource) !void {
+  pub fn cyclic_task(pid: beam.pid, master_resource: MasterResource, domain_resources: []DomainResource, slave_resources: []SlaveConfigResource) !void {
       const master = master_resource.unpack();
       var master_state: ec_master_state_t = undefined;
       var prev_master_state: ec_master_state_t = undefined;
@@ -238,6 +245,16 @@ defmodule EthercatEx.Nif do
 
       for (domain_resources) |domain_resource| {
           try domains.append(.{.domain = domain_resource.unpack(), .state = undefined});
+      }
+
+      var slaves = std.ArrayList(struct {
+          slave: *ecrt.ec_slave_config_t,
+          state: ec_slave_config_state_t,
+      }).init(beam.allocator);
+      defer slaves.deinit();
+
+      for (slave_resources) |slave_resource| {
+          try slaves.append(.{.slave = slave_resource.unpack(), .state = undefined});
       }
 
       defer {
@@ -279,8 +296,28 @@ defmodule EthercatEx.Nif do
 
               _ = ecrt.ecrt_domain_queue(domain);
 
-              // Update the tuple in the ArrayList with the new state
               domains.items[i] = .{ .domain = domain, .state = state };
+          }
+
+          // Process all slaves
+          for (slaves.items, 0..) |tuple, i| {
+              const slave = tuple.slave;
+              const prev_state = tuple.state;
+              var state: ec_slave_config_state_t = undefined;
+
+              _ = ecrt.ecrt_slave_config_state(slave, @ptrCast(&state));
+
+              if (state.al_state != prev_state.al_state) {
+                  _ = try beam.send(pid, .state_changed, .{state.al_state});
+              }
+              if (state.online != prev_state.online) {
+                  _ = try beam.send(pid, .online_changed, .{state.online});
+              }
+              if (state.operational != prev_state.operational) {
+                  _ = try beam.send(pid, .operational_changed, .{state.operational});
+              }
+
+              slaves.items[i] = .{ .slave = slave, .state = state };
           }
 
           _ = ecrt.ecrt_master_send(master);

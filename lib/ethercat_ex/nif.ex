@@ -294,9 +294,9 @@ defmodule EthercatEx.Nif do
                   _ = try beam.send(pid, .state_changed, .{state.wc_state});
               }
 
-              _ = ecrt.ecrt_domain_queue(domain);
-
               domains.items[i] = .{ .domain = domain, .state = state };
+
+              _ = ecrt.ecrt_domain_queue(domain);
           }
 
           // Process all slaves

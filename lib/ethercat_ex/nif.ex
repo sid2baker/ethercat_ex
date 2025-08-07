@@ -69,6 +69,7 @@ defmodule EthercatEx.Nif do
       SlaveConfigError,
       ActivateError,
       PdoRegError,
+      InvalidDomainData,
   };
 
   // this is needed since zig doesn't support bitfields. See https://github.com/ziglang/zig/issues/1499
@@ -240,11 +241,24 @@ defmodule EthercatEx.Nif do
       var domains = std.ArrayList(struct {
           domain: *ecrt.ec_domain_t,
           state: ecrt.ec_domain_state_t,
+          prev_data: []u8,
+          data: []u8,
       }).init(beam.allocator);
       defer domains.deinit();
 
       for (domain_resources) |domain_resource| {
-          try domains.append(.{.domain = domain_resource.unpack(), .state = undefined});
+          const domain = domain_resource.unpack();
+          const size = ecrt.ecrt_domain_size(domain);
+          const data_ptr = ecrt.ecrt_domain_data(domain);
+          if (data_ptr == null or size == 0) {
+              return MasterError.InvalidDomainData;
+          }
+          // Memory is handled by ecrt.h
+          const data = data_ptr[0..size];
+          const prev_data: []u8 = beam.allocator.alloc(u8, size) catch return error.OutOfMemory;
+          @memcpy(prev_data, data);
+
+          try domains.append(.{.domain = domain, .state = undefined, .prev_data = prev_data, .data = data});
       }
 
       var slaves = std.ArrayList(struct {
@@ -283,6 +297,8 @@ defmodule EthercatEx.Nif do
               const domain = tuple.domain;
               const prev_state = tuple.state;
               var state: ecrt.ec_domain_state_t = undefined;
+              const prev_data = tuple.prev_data;
+              const data = tuple.data;
 
               _ = ecrt.ecrt_domain_process(domain);
               _ = ecrt.ecrt_domain_state(domain, &state);
@@ -294,7 +310,13 @@ defmodule EthercatEx.Nif do
                   _ = try beam.send(pid, .state_changed, .{state.wc_state});
               }
 
-              domains.items[i] = .{ .domain = domain, .state = state };
+              if (!std.mem.eql(u8, data, prev_data)) {
+                  _ = try beam.send(pid, .data_changed, .{data});
+              }
+
+              @memcpy(prev_data, data);
+
+              domains.items[i] = .{ .domain = domain, .state = state, .prev_data = prev_data, .data = data };
 
               _ = ecrt.ecrt_domain_queue(domain);
           }

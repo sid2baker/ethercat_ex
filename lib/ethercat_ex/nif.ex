@@ -311,9 +311,8 @@ defmodule EthercatEx.Nif do
 
               if (!std.mem.eql(u8, data, prev_data)) {
                   _ = try beam.send(pid, .data_changed, .{data});
+                  @memcpy(prev_data, data);
               }
-
-              @memcpy(prev_data, data);
 
               domains.items[i] = .{ .domain = domain, .state = state, .prev_data = prev_data, .data = data };
 

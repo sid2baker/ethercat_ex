@@ -17,7 +17,7 @@ defmodule EthercatEx.Nif do
       master_activate: [],
       master_receive: [],
       master_send: [],
-      master_state: [],
+      get_master_state: [],
       master_create_domain: [],
       master_slave_config: [],
       master_reset: [],
@@ -101,7 +101,7 @@ defmodule EthercatEx.Nif do
       _ = ecrt.ecrt_master_send(master.unpack());
   }
 
-  pub fn master_state(master: MasterResource) !beam.term {
+  pub fn get_master_state(master: MasterResource) !beam.term {
       var state: ec_master_state_t = undefined;
       const result = ecrt.ecrt_master_state(master.unpack(), @ptrCast(&state));
       if (result != 0) {
@@ -227,6 +227,8 @@ defmodule EthercatEx.Nif do
 
   pub fn cyclic_task(pid: beam.pid, master_resource: MasterResource, domain_resources: []DomainResource) !void {
       const master = master_resource.unpack();
+      var master_state: ec_master_state_t = undefined;
+      var prev_master_state: ec_master_state_t = undefined;
 
       var domains = std.ArrayList(struct {
           domain: *ecrt.ec_domain_t,
@@ -245,6 +247,19 @@ defmodule EthercatEx.Nif do
       while (true) {
           _ = try beam.send(pid, .unblock, .{});
           _ = ecrt.ecrt_master_receive(master);
+
+          _ = ecrt.ecrt_master_state(master, @ptrCast(&master_state));
+
+          if (master_state.slaves_responding != prev_master_state.slaves_responding) {
+              _ = try beam.send(pid, .slaves_responding, .{master_state.slaves_responding});
+          }
+          if (master_state.al_states != prev_master_state.al_states) {
+              _ = try beam.send(pid, .al_states, .{master_state.al_states});
+          }
+          if (master_state.link_up != prev_master_state.link_up) {
+              _ = try beam.send(pid, .link_up, .{master_state.link_up});
+          }
+          prev_master_state = master_state;
 
           // Process all domains
           for (domains.items, 0..) |tuple, i| {

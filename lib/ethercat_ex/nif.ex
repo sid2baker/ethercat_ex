@@ -276,7 +276,6 @@ defmodule EthercatEx.Nif do
       }
 
       while (true) {
-          _ = try beam.send(pid, .unblock, .{});
           _ = ecrt.ecrt_master_receive(master);
 
           _ = ecrt.ecrt_master_state(master, @ptrCast(&master_state));

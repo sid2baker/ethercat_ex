@@ -36,7 +36,8 @@ defmodule EthercatEx.Nif do
       slave_config_reg_pdo_entry: [],
       master_get_sync_manager: [],
       master_get_pdo: [],
-      cyclic_task: [:threaded] # maybe use dirty_cup/dirty_io
+      # maybe use dirty_cup/dirty_io
+      cyclic_task: [:threaded]
     ],
     resources: [
       :MasterResource,
@@ -72,10 +73,10 @@ defmodule EthercatEx.Nif do
 
   // this is needed since zig doesn't support bitfields. See https://github.com/ziglang/zig/issues/1499
   const ec_master_state_t = packed struct {
-    slaves_responding: u32, // 32 bits
-    al_states: u4,         // 4 bits
-    link_up: u1,           // 1 bit
-    padding: u27,          // 27 bits to align to 64 bits (8 bytes)
+      slaves_responding: u32, // 32 bits
+      al_states: u4, // 4 bits
+      link_up: u1, // 1 bit
+      padding: u27, // 27 bits to align to 64 bits (8 bytes)
   };
 
   pub fn version_magic() !u32 {
@@ -84,7 +85,7 @@ defmodule EthercatEx.Nif do
 
   pub fn request_master() !MasterResource {
       const master = ecrt.ecrt_request_master(0) orelse return MasterError.MasterNotFound;
-      return MasterResource.create(master, .{.released = false});
+      return MasterResource.create(master, .{ .released = false });
   }
 
   pub fn master_activate(master: MasterResource) !void {
@@ -101,12 +102,12 @@ defmodule EthercatEx.Nif do
   }
 
   pub fn master_state(master: MasterResource) !beam.term {
-    var state: ec_master_state_t = undefined;
-    const result = ecrt.ecrt_master_state(master.unpack(), @ptrCast(&state));
-    if (result != 0) {
-      return MasterError.MasterNotFound;
-    }
-    return beam.make(state, .{.as = .map});
+      var state: ec_master_state_t = undefined;
+      const result = ecrt.ecrt_master_state(master.unpack(), @ptrCast(&state));
+      if (result != 0) {
+          return MasterError.MasterNotFound;
+      }
+      return beam.make(state, .{ .as = .map });
   }
 
   pub fn master_create_domain(master: MasterResource) !DomainResource {
@@ -166,9 +167,9 @@ defmodule EthercatEx.Nif do
 
   // TODO add bit_position
   pub fn get_domain_value(domain: DomainResource, offset: u32) u8 {
-    const data = ecrt.ecrt_domain_data(domain.unpack());
-    std.debug.print("Byte 0: {}, Byte 1: {}\n", .{data[0], data[1]});
-    return data[offset];
+      const data = ecrt.ecrt_domain_data(domain.unpack());
+      std.debug.print("Byte 0: {}, Byte 1: {}\n", .{ data[0], data[1] });
+      return data[offset];
   }
 
   pub fn domain_state(domain: DomainResource) !beam.term {
@@ -182,7 +183,7 @@ defmodule EthercatEx.Nif do
   }
 
   pub fn slave_config_pdo_assign_add(slave_config: SlaveConfigResource, sync_index: u8, index: u16) !void {
-    _ = ecrt.ecrt_slave_config_pdo_assign_add(slave_config.unpack(), sync_index, index);
+      _ = ecrt.ecrt_slave_config_pdo_assign_add(slave_config.unpack(), sync_index, index);
   }
 
   pub fn slave_config_pdo_assign_clear(slave_config: SlaveConfigResource, sync_index: u8) !void {
@@ -201,21 +202,21 @@ defmodule EthercatEx.Nif do
       var bit_position: c_uint = 0;
       const result: c_int = ecrt.ecrt_slave_config_reg_pdo_entry(slave_config.unpack(), entry_index, entry_subindex, domain.unpack(), &bit_position);
       if (bit_position != 0) {
-        std.debug.print("Bit Position: {}\n", .{bit_position});
+          std.debug.print("Bit Position: {}\n", .{bit_position});
       }
       if (result >= 0) {
-        return @as(u32, @intCast(result));
+          return @as(u32, @intCast(result));
       } else {
-        return MasterError.PdoRegError;
+          return MasterError.PdoRegError;
       }
   }
 
   // TODO: look for further functions to implement which aren't listed in ecrt.h (https://gitlab.com/etherlab.org/ethercat/-/blob/stable-1.6/lib/master.c)
   pub fn master_get_sync_manager(master: MasterResource, slave_position: u16, sync_index: u8) !void {
-    var sync: ecrt.ec_sync_info_t = undefined;
-    _ =  ecrt.ecrt_master_get_sync_manager(master.unpack(), slave_position, sync_index, &sync);
-    //return beam.make(sync, .{});
-    std.debug.print("Sync: {}\n", .{sync});
+      var sync: ecrt.ec_sync_info_t = undefined;
+      _ = ecrt.ecrt_master_get_sync_manager(master.unpack(), slave_position, sync_index, &sync);
+      //return beam.make(sync, .{});
+      std.debug.print("Sync: {}\n", .{sync});
   }
 
   pub fn master_get_pdo(master: MasterResource, slave_position: u16, sync_index: u8, pos: u16) !void {
@@ -224,21 +225,49 @@ defmodule EthercatEx.Nif do
       //return beam.make(pdo, .{});
   }
 
-  // TODO make this flexible to use mulitple domains
-  pub fn cyclic_task(pid: beam.pid, master_resource: MasterResource, domain_resource: DomainResource) !void {
+  pub fn cyclic_task(pid: beam.pid, master_resource: MasterResource, domain_resources: []DomainResource) !void {
       const master = master_resource.unpack();
-      const domain = domain_resource.unpack();
 
-      defer {
-        beam.send(pid, .killed, .{}) catch {};
+      var domains = std.ArrayList(struct {
+          domain: *ecrt.ec_domain_t,
+          state: ecrt.ec_domain_state_t,
+      }).init(beam.allocator);
+      defer domains.deinit();
+
+      for (domain_resources) |domain_resource| {
+          try domains.append(.{.domain = domain_resource.unpack(), .state = undefined});
       }
 
-      while(true) {
+      defer {
+          beam.send(pid, .killed, .{}) catch {};
+      }
+
+      while (true) {
           _ = try beam.send(pid, .unblock, .{});
           _ = ecrt.ecrt_master_receive(master);
-          _ = ecrt.ecrt_domain_process(domain);
-          // TODO do some stuff here
-          _ = ecrt.ecrt_domain_queue(domain);
+
+          // Process all domains
+          for (domains.items, 0..) |tuple, i| {
+              const domain = tuple.domain;
+              const prev_state = tuple.state;
+              var state: ecrt.ec_domain_state_t = undefined;
+
+              _ = ecrt.ecrt_domain_process(domain);
+              _ = ecrt.ecrt_domain_state(domain, &state);
+
+              if (state.working_counter != prev_state.working_counter) {
+                  _ = try beam.send(pid, .wc_changed, .{state.working_counter});
+              }
+              if (state.wc_state != prev_state.wc_state) {
+                  _ = try beam.send(pid, .state_changed, .{state.wc_state});
+              }
+
+              _ = ecrt.ecrt_domain_queue(domain);
+
+              // Update the tuple in the ArrayList with the new state
+              domains.items[i] = .{ .domain = domain, .state = state };
+          }
+
           _ = ecrt.ecrt_master_send(master);
           try beam.yield();
       }

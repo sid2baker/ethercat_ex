@@ -1,7 +1,7 @@
 defmodule EthercatEx.Nif do
   @moduledoc false
   use Zig,
-    otp_app: :zigler,
+    otp_app: :ethercat_ex,
     c: [
       include_dirs: "/usr/include/",
       link_lib:
@@ -258,7 +258,7 @@ defmodule EthercatEx.Nif do
           const prev_data: []u8 = beam.allocator.alloc(u8, size) catch return error.OutOfMemory;
           @memcpy(prev_data, data);
 
-          try domains.append(.{.domain = domain, .state = undefined, .prev_data = prev_data, .data = data});
+          try domains.append(.{ .domain = domain, .state = undefined, .prev_data = prev_data, .data = data });
       }
 
       var slaves = std.ArrayList(struct {
@@ -268,7 +268,7 @@ defmodule EthercatEx.Nif do
       defer slaves.deinit();
 
       for (slave_resources) |slave_resource| {
-          try slaves.append(.{.slave = slave_resource.unpack(), .state = undefined});
+          try slaves.append(.{ .slave = slave_resource.unpack(), .state = undefined });
       }
 
       defer {

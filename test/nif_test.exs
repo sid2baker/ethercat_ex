@@ -1,5 +1,8 @@
 defmodule EthernetEx.NifTest do
   use ExUnit.Case
+  import EthercatEx.TestHelpers
+
+  alias EthercatEx.Nif
 
   # FAKE_EC_NAME=FakeEtherCAT is default
   @master_location Path.join(System.tmp_dir!(), "FakeEtherCAT")
@@ -8,7 +11,8 @@ defmodule EthernetEx.NifTest do
     File.mkdir_p!(@master_location)
 
     on_exit(fn ->
-      File.rm_rf!(@master_location)
+      nil
+      # File.rm_rf!(@master_location)
     end)
 
     :ok
@@ -37,10 +41,65 @@ defmodule EthernetEx.NifTest do
     EthercatEx.Nif.master_create_domain(master)
   end
 
-  @tag :focus
   test "release already released master" do
     master = EthercatEx.Nif.request_master()
     EthercatEx.Nif.release_master(master)
     EthercatEx.Nif.release_master(master)
+  end
+
+  test "get slave info" do
+    master = Nif.request_master()
+    slave_info = Nif.master_get_slave(master, 0)
+    assert slave_info.alias == 0
+  end
+
+  test "create slave config" do
+    master = Nif.request_master()
+    Nif.master_slave_config(master, 0, 0, 0xFF11, 0xFF22)
+    Nif.master_slave_config(master, 0, 0, 0xFF11, 0xFF23)
+    |> IO.inspect()
+  end
+
+  test "test" do
+    master = Nif.request_master()
+    domain = Nif.master_create_domain(master)
+
+    # input card
+    alias = 0
+    slave_pos = 0
+    sync_index = 2
+    pdo_index = 0x1A00
+    entry_index = 0x6000
+    entry_subindex = 0x00
+    entry_bit_length = 1
+    direction = 2 # EC_DIR_INPUT
+    watchdog = 0 # EC_WD_DEFAULT
+
+    sc = Nif.master_slave_config(master, alias, slave_pos, 0xFF11, 0xFF22)
+
+    Nif.slave_config_sync_manager(sc, sync_index, direction, watchdog)
+
+    Nif.slave_config_pdo_assign_clear(sc, sync_index)
+    Nif.slave_config_pdo_assign_add(sc, sync_index, pdo_index)
+    Nif.slave_config_pdo_mapping_clear(sc, pdo_index)
+    Nif.slave_config_pdo_mapping_add(sc, pdo_index, entry_index, entry_subindex, entry_bit_length)
+
+    offset =
+      Nif.slave_config_reg_pdo_entry(sc, entry_index, entry_subindex, domain)
+      |> IO.inspect(label: "input: ")
+
+    Nif.master_activate(master)
+    Nif.cyclic_task(self(), master, [domain], [sc])
+  end
+
+  test "hello" do
+    master = Nif.request_master()
+    domain = Nif.master_create_domain(master)
+    sc1 = Nif.master_slave_config(master, 0, 0, 0xFF11, 0xFF22)
+    sc2 = Nif.master_slave_config(master, 0, 1, 0xFF11, 0xFF33)
+
+    create_input_card(sc1, domain)
+    create_output_card(sc2, domain)
+    Nif.master_activate(master)
   end
 end

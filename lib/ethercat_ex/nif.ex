@@ -125,6 +125,8 @@ defmodule EthercatEx.Nif do
 
   pub fn master_slave_config(master: MasterResource, alias: u16, position: u16, vendor_id: u32, product_code: u32) !SlaveConfigResource {
       const slave_config = ecrt.ecrt_master_slave_config(master.unpack(), alias, position, vendor_id, product_code) orelse return MasterError.SlaveConfigError;
+      std.debug.print("Slave Config: {}\n", .{slave_config});
+      std.debug.print("Master: {}\n", .{master.unpack()});
       return SlaveConfigResource.create(slave_config, .{});
   }
 

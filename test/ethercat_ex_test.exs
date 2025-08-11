@@ -1,3 +1,3 @@
 defmodule EthercatExTest do
-  use ExUnit.Case
+  use EthercatEx.TestSetup
 end

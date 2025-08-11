@@ -10,7 +10,7 @@ defmodule EthercatEx.Master do
   use GenServer
   require Logger
 
-  alias EthercatEx.{Nif, Domain, SlaveConfig}
+  alias EthercatEx.{Nif, Domain, Slave}
 
   defstruct [
     :master_ref,
@@ -152,8 +152,9 @@ defmodule EthercatEx.Master do
 
   @impl true
   def init(opts) do
+    master = Nif.request_master()
     state = %__MODULE__{
-      master_ref: nil,
+      master_ref: master,
       domains: [],
       slaves: [],
       cyclic_task_pid: nil,
@@ -223,7 +224,8 @@ defmodule EthercatEx.Master do
       |> Enum.uniq()
 
     # if everything is ok, start the slave
-    {:ok, slave} = Slave.start_link(sc)
+    # TODO fix sc slave_config naming issue. sc is the ref
+    {:ok, slave} = Slave.start_link(sc, slave_config)
 
     {:reply, {:ok, sc}, %{state | domains: domains, slaves: [slave | state.slaves]}}
   end
@@ -285,12 +287,11 @@ defmodule EthercatEx.Master do
 
     task_pid =
       spawn_link(fn ->
-        cyclic_task_loop(parent_pid, master_ref, domain_ref, state.cycle_time_ms)
+        #Nif.cyclic_task(parent_pid, master_ref, domain_ref, state.cycle_time_ms)
       end)
 
     new_state = %{state | cyclic_task_pid: task_pid}
     Logger.info("Cyclic task started with PID: #{inspect(task_pid)}")
-    send_status_update(state, :cyclic_task_started)
     {:reply, {:ok, task_pid}, new_state}
   end
 
@@ -307,7 +308,6 @@ defmodule EthercatEx.Master do
     Process.exit(pid, :normal)
     new_state = %{state | cyclic_task_pid: nil}
     Logger.info("Cyclic task stopped")
-    send_status_update(state, :cyclic_task_stopped)
     {:reply, :ok, new_state}
   end
 
@@ -416,13 +416,6 @@ defmodule EthercatEx.Master do
     {:noreply, state}
   end
 
-  def handle_info({:EXIT, pid, reason}, %{cyclic_task_pid: pid} = state) do
-    Logger.warning("Cyclic task exited with reason: #{inspect(reason)}")
-    new_state = %{state | cyclic_task_pid: nil}
-    send_status_update(state, {:cyclic_task_exited, reason})
-    {:noreply, new_state}
-  end
-
   def handle_info(:unblock, state) do
     # Message from cyclic task - just acknowledge
     {:noreply, state}
@@ -432,51 +425,4 @@ defmodule EthercatEx.Master do
     Logger.debug("Received unknown message: #{inspect(msg)}")
     {:noreply, state}
   end
-
-  @impl true
-  def terminate(reason, %{master_ref: master_ref, cyclic_task_pid: task_pid}) do
-    Logger.info("EtherCAT Master terminating with reason: #{inspect(reason)}")
-
-    # Stop cyclic task if running
-    if task_pid do
-      Process.exit(task_pid, :kill)
-    end
-
-    # Release master resource if we have one
-    if master_ref do
-      :ok = Nif.master_release(master_ref)
-      Logger.info("Master resource released on termination")
-    end
-
-    :ok
-  end
-
-  ## Private Functions
-
-  defp cyclic_task_loop(parent_pid, master_ref, domain_ref, cycle_time_ms) do
-    try do
-      # Send process data
-      :ok = Nif.master_receive(master_ref)
-      :ok = Nif.domain_process(domain_ref)
-
-      # Application code would process domain data here
-
-      # Queue and send process data
-      :ok = Nif.domain_queue(domain_ref)
-      :ok = Nif.master_send(master_ref)
-
-      # Wait for next cycle
-      Process.sleep(cycle_time_ms)
-
-      # Continue loop
-      cyclic_task_loop(parent_pid, master_ref, domain_ref, cycle_time_ms)
-    rescue
-      e ->
-        Logger.error("Error in cyclic task: #{inspect(e)}")
-        send(parent_pid, {:cyclic_task_error, e})
-    end
-  end
-
-  # Placeholder for status updates - can be extended later
-  defp send_status_update(_state, _event), do: :ok
 end

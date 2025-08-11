@@ -1,22 +1,9 @@
 defmodule EthernetEx.NifTest do
-  use ExUnit.Case
+  use EthercatEx.TestSetup
+
   import EthercatEx.TestHelpers
 
   alias EthercatEx.Nif
-
-  # FAKE_EC_NAME=FakeEtherCAT is default
-  @master_location Path.join(System.tmp_dir!(), "FakeEtherCAT")
-
-  setup_all do
-    File.mkdir_p!(@master_location)
-
-    on_exit(fn ->
-      nil
-      # File.rm_rf!(@master_location)
-    end)
-
-    :ok
-  end
 
   test "get version" do
     version = EthercatEx.Nif.version_magic()
@@ -93,16 +80,5 @@ defmodule EthernetEx.NifTest do
 
     Nif.master_activate(master)
     Nif.cyclic_task(self(), master, [domain], [sc])
-  end
-
-  test "hello" do
-    master = Nif.request_master()
-    domain = Nif.master_create_domain(master)
-    sc1 = Nif.master_slave_config(master, 0, 0, 0xFF11, 0xFF22)
-    sc2 = Nif.master_slave_config(master, 0, 1, 0xFF11, 0xFF33)
-
-    create_input_card(sc1, domain)
-    create_output_card(sc2, domain)
-    Nif.master_activate(master)
   end
 end

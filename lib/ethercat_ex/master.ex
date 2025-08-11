@@ -10,9 +10,10 @@ defmodule EthercatEx.Master do
   use GenServer
   require Logger
 
-  alias EthercatEx.{Nif, Domain, Slave}
+  alias EthercatEx.Nif
 
   @type master_state :: :init | :preop | :safeop | :op
+
   @type slave_info :: %{
           position: non_neg_integer(),
           vendor_id: non_neg_integer(),
@@ -27,22 +28,14 @@ defmodule EthercatEx.Master do
     :domains,
     :slave_configs,
     :cyclic_task_pid,
-    :monitor_pid,
-    :cycle_time_ms,
-    state: :init,
-    slaves: [],
     active: false
   ]
 
   @type t :: %__MODULE__{
           master_ref: reference() | nil,
-          domains: map(),
-          slave_configs: map(),
+          domains: %{non_neg_integer() => reference()},
+          slave_configs: %{non_neg_integer() => reference()},
           cyclic_task_pid: pid() | nil,
-          monitor_pid: pid() | nil,
-          cycle_time_ms: pos_integer(),
-          state: master_state(),
-          slaves: [slave_info()],
           active: boolean()
         }
 
@@ -54,8 +47,6 @@ defmodule EthercatEx.Master do
   ## Options
 
     * `:name` - Name for the GenServer (default: `__MODULE__`)
-    * `:cycle_time_ms` - Cycle time in milliseconds (default: 1)
-    * `:monitor_pid` - PID to send status updates to (optional)
 
   ## Examples
 
@@ -71,20 +62,11 @@ defmodule EthercatEx.Master do
   end
 
   @doc """
-  Requests an EtherCAT master from the EtherLab stack.
-
-  This initializes the master resource through the NIF.
-  """
-  def request_master(server \\ __MODULE__) do
-    GenServer.call(server, :request_master)
-  end
-
-  @doc """
   Creates a new domain for process data exchange.
 
   Returns `{:ok, domain_id}` on success.
   """
-  def create_domain(server \\ __MODULE__) do
+  def create_domain(server, name) do
     GenServer.call(server, :create_domain)
   end
 
@@ -100,7 +82,7 @@ defmodule EthercatEx.Master do
 
   Returns `{:ok, slave_config_id}` on success.
   """
-  def configure_slave(server \\ __MODULE__, alias, position, vendor_id, product_code) do
+  def configure_slave(server, alias, position, vendor_id, product_code) do
     GenServer.call(server, {:configure_slave, alias, position, vendor_id, product_code})
   end
 
@@ -117,7 +99,7 @@ defmodule EthercatEx.Master do
   Returns `{:ok, offset}` where offset is the byte offset in the domain.
   """
   def register_pdo_entry(
-        server \\ __MODULE__,
+        server,
         slave_config_id,
         entry_index,
         entry_subindex,
@@ -134,7 +116,7 @@ defmodule EthercatEx.Master do
 
   This must be called after all configuration is complete.
   """
-  def activate(server \\ __MODULE__) do
+  def activate(server) do
     GenServer.call(server, :activate)
   end
 
@@ -143,14 +125,14 @@ defmodule EthercatEx.Master do
 
   The cyclic task handles the periodic exchange of process data.
   """
-  def start_cyclic_task(server \\ __MODULE__) do
+  def start_cyclic_task(server) do
     GenServer.call(server, :start_cyclic_task)
   end
 
   @doc """
   Stops the cyclic task.
   """
-  def stop_cyclic_task(server \\ __MODULE__) do
+  def stop_cyclic_task(server) do
     GenServer.call(server, :stop_cyclic_task)
   end
 
@@ -162,7 +144,7 @@ defmodule EthercatEx.Master do
   - `:al_states` - Application layer states
   - `:link_up` - Link status
   """
-  def get_master_state(server \\ __MODULE__) do
+  def get_master_state(server) do
     GenServer.call(server, :get_master_state)
   end
 
@@ -175,14 +157,14 @@ defmodule EthercatEx.Master do
 
   Returns `{:ok, slave_info}` or `{:error, reason}`.
   """
-  def get_slave_info(server \\ __MODULE__, slave_position) do
+  def get_slave_info(server, slave_position) do
     GenServer.call(server, {:get_slave_info, slave_position})
   end
 
   @doc """
   Scans the bus and returns information about all detected slaves.
   """
-  def scan_slaves(server \\ __MODULE__) do
+  def scan_slaves(server) do
     GenServer.call(server, :scan_slaves)
   end
 
@@ -196,28 +178,28 @@ defmodule EthercatEx.Master do
 
   Returns the byte value at the offset.
   """
-  def read_domain_value(server \\ __MODULE__, domain_id, offset) do
+  def read_domain_value(server, domain_id, offset) do
     GenServer.call(server, {:read_domain_value, domain_id, offset})
   end
 
   @doc """
   Resets the master and all slaves.
   """
-  def reset(server \\ __MODULE__) do
+  def reset(server) do
     GenServer.call(server, :reset)
   end
 
   @doc """
   Releases the master resource and stops the GenServer.
   """
-  def release(server \\ __MODULE__) do
+  def release(server) do
     GenServer.call(server, :release)
   end
 
   @doc """
   Gets the current state of the GenServer.
   """
-  def get_state(server \\ __MODULE__) do
+  def get_state(server) do
     GenServer.call(server, :get_state)
   end
 
@@ -225,37 +207,25 @@ defmodule EthercatEx.Master do
 
   @impl true
   def init(opts) do
-    cycle_time_ms = Keyword.get(opts, :cycle_time_ms, 1)
-    monitor_pid = Keyword.get(opts, :monitor_pid)
-
     state = %__MODULE__{
       master_ref: nil,
       domains: %{},
       slave_configs: %{},
       cyclic_task_pid: nil,
-      monitor_pid: monitor_pid,
-      cycle_time_ms: cycle_time_ms,
-      state: :init,
-      slaves: [],
       active: false
     }
 
     Logger.info("EtherCAT Master GenServer started")
+
     {:ok, state}
   end
 
   @impl true
   def handle_call(:request_master, _from, state) do
-    case Nif.request_master() do
-      {:ok, master_ref} ->
-        new_state = %{state | master_ref: master_ref, state: :preop}
-        Logger.info("EtherCAT master requested successfully")
-        {:reply, {:ok, master_ref}, new_state}
-
-      {:error, reason} ->
-        Logger.error("Failed to request EtherCAT master: #{inspect(reason)}")
-        {:reply, {:error, reason}, state}
-    end
+    master_ref = Nif.request_master()
+    new_state = %{state | master_ref: master_ref}
+    Logger.info("EtherCAT master requested successfully")
+    {:reply, {:ok, master_ref}, new_state}
   end
 
   @impl true
@@ -264,18 +234,12 @@ defmodule EthercatEx.Master do
   end
 
   def handle_call(:create_domain, _from, %{master_ref: master_ref, domains: domains} = state) do
-    case Nif.master_create_domain(master_ref) do
-      {:ok, domain_ref} ->
-        domain_id = map_size(domains)
-        new_domains = Map.put(domains, domain_id, domain_ref)
-        new_state = %{state | domains: new_domains}
-        Logger.debug("Created domain with ID: #{domain_id}")
-        {:reply, {:ok, domain_id}, new_state}
-
-      {:error, reason} ->
-        Logger.error("Failed to create domain: #{inspect(reason)}")
-        {:reply, {:error, reason}, state}
-    end
+    domain_ref = Nif.master_create_domain(master_ref)
+    domain_id = map_size(domains)
+    new_domains = Map.put(domains, domain_id, domain_ref)
+    new_state = %{state | domains: new_domains}
+    Logger.debug("Created domain with ID: #{domain_id}")
+    {:reply, {:ok, domain_id}, new_state}
   end
 
   @impl true
@@ -292,27 +256,14 @@ defmodule EthercatEx.Master do
         _from,
         %{master_ref: master_ref, slave_configs: configs} = state
       ) do
-    case Nif.master_slave_config(master_ref, alias, position, vendor_id, product_code) do
-      {:ok, slave_config_ref} ->
-        config_id = map_size(configs)
+    slave_config_ref = Nif.master_slave_config(master_ref, alias, position, vendor_id, product_code)
+    config_id = map_size(configs)
 
-        new_configs =
-          Map.put(configs, config_id, %{
-            ref: slave_config_ref,
-            alias: alias,
-            position: position,
-            vendor_id: vendor_id,
-            product_code: product_code
-          })
+    new_configs = Map.put(configs, config_id, slave_config_ref)
 
-        new_state = %{state | slave_configs: new_configs}
-        Logger.debug("Configured slave at position #{position} with ID: #{config_id}")
-        {:reply, {:ok, config_id}, new_state}
-
-      {:error, reason} ->
-        Logger.error("Failed to configure slave: #{inspect(reason)}")
-        {:reply, {:error, reason}, state}
-    end
+    new_state = %{state | slave_configs: new_configs}
+    Logger.debug("Configured slave at position #{position} with ID: #{config_id}")
+    {:reply, {:ok, config_id}, new_state}
   end
 
   @impl true
@@ -321,28 +272,23 @@ defmodule EthercatEx.Master do
         _from,
         %{slave_configs: configs, domains: domains} = state
       ) do
-    with {:ok, slave_config} <- Map.fetch(configs, slave_config_id),
+    with {:ok, slave_config_ref} <- Map.fetch(configs, slave_config_id),
          {:ok, domain_ref} <- Map.fetch(domains, domain_id) do
-      case Nif.slave_config_reg_pdo_entry(
-             slave_config.ref,
-             entry_index,
-             entry_subindex,
-             domain_ref
-           ) do
-        {:ok, offset} ->
-          Logger.debug(
-            "Registered PDO entry #{entry_index}:#{entry_subindex} at offset #{offset}"
-          )
+      offset = Nif.ecrt_slave_config_reg_pdo_entry(
+        slave_config_ref,
+        entry_index,
+        entry_subindex,
+        domain_ref,
+        0
+      )
 
-          {:reply, {:ok, offset}, state}
+      Logger.debug(
+        "Registered PDO entry: index=0x#{Integer.to_string(entry_index, 16)}, subindex=0x#{Integer.to_string(entry_subindex, 16)}, offset=#{offset}"
+      )
 
-        {:error, reason} ->
-          Logger.error("Failed to register PDO entry: #{inspect(reason)}")
-          {:reply, {:error, reason}, state}
-      end
+      {:reply, {:ok, offset}, state}
     else
-      :error ->
-        {:reply, {:error, :invalid_id}, state}
+      :error -> {:reply, {:error, :invalid_config_or_domain}, state}
     end
   end
 
@@ -352,17 +298,10 @@ defmodule EthercatEx.Master do
   end
 
   def handle_call(:activate, _from, %{master_ref: master_ref} = state) do
-    case Nif.master_activate(master_ref) do
-      :ok ->
-        new_state = %{state | active: true, state: :op}
-        Logger.info("EtherCAT master activated successfully")
-        send_status_update(state, :activated)
-        {:reply, :ok, new_state}
-
-      {:error, reason} ->
-        Logger.error("Failed to activate master: #{inspect(reason)}")
-        {:reply, {:error, reason}, state}
-    end
+    :ok = Nif.master_activate(master_ref)
+    new_state = %{state | active: true}
+    Logger.info("EtherCAT master activated successfully")
+    {:reply, :ok, new_state}
   end
 
   @impl true
@@ -415,14 +354,10 @@ defmodule EthercatEx.Master do
   end
 
   def handle_call(:get_master_state, _from, %{master_ref: master_ref} = state) do
-    case Nif.master_state(master_ref) do
-      {:ok, master_state} ->
-        {:reply, {:ok, master_state}, state}
-
-      {:error, reason} ->
-        Logger.error("Failed to get master state: #{inspect(reason)}")
-        {:reply, {:error, reason}, state}
-    end
+    # Note: master_state function needs to be implemented in NIF
+    master_state = :unknown
+    Logger.debug("Master state: #{inspect(master_state)}")
+    {:reply, {:ok, master_state}, state}
   end
 
   @impl true
@@ -450,27 +385,21 @@ defmodule EthercatEx.Master do
   end
 
   def handle_call(:scan_slaves, _from, %{master_ref: master_ref} = state) do
-    case Nif.master_state(master_ref) do
-      {:ok, %{slaves_responding: num_slaves}} ->
-        slaves =
-          Enum.map(0..(num_slaves - 1), fn position ->
-            case Nif.master_get_slave(master_ref, position) do
-              {:ok, slave_info} ->
-                Map.put(slave_info, :position, position)
+    # Scan for available slaves by trying positions 0-15 (typical range)
+    slaves =
+      Enum.reduce(0..15, [], fn position, acc ->
+        case Nif.master_get_slave(master_ref, position) do
+          {:ok, slave_info} ->
+            [Map.put(slave_info, :position, position) | acc]
 
-              {:error, _} ->
-                %{position: position, error: :unavailable}
-            end
-          end)
+          {:error, _} ->
+            acc
+        end
+      end)
+      |> Enum.reverse()
 
-        new_state = %{state | slaves: slaves}
-        Logger.info("Scanned #{num_slaves} slaves")
-        {:reply, {:ok, slaves}, new_state}
-
-      {:error, reason} ->
-        Logger.error("Failed to scan slaves: #{inspect(reason)}")
-        {:reply, {:error, reason}, state}
-    end
+    Logger.info("Scanned #{length(slaves)} slaves")
+    {:reply, {:ok, slaves}, state}
   end
 
   @impl true
@@ -491,17 +420,10 @@ defmodule EthercatEx.Master do
   end
 
   def handle_call(:reset, _from, %{master_ref: master_ref} = state) do
-    case Nif.master_reset(master_ref) do
-      :ok ->
-        new_state = %{state | state: :init, active: false}
-        Logger.info("EtherCAT master reset successfully")
-        send_status_update(state, :reset)
-        {:reply, :ok, new_state}
-
-      {:error, reason} ->
-        Logger.error("Failed to reset master: #{inspect(reason)}")
-        {:reply, {:error, reason}, state}
-    end
+    :ok = Nif.master_reset(master_ref)
+    new_state = %{state | active: false}
+    Logger.info("EtherCAT master reset successfully")
+    {:reply, :ok, new_state}
   end
 
   @impl true
@@ -512,19 +434,12 @@ defmodule EthercatEx.Master do
   def handle_call(:release, _from, %{master_ref: master_ref, cyclic_task_pid: task_pid} = state) do
     # Stop cyclic task if running
     if task_pid do
-      Process.exit(task_pid, :normal)
+      Process.exit(task_pid, :shutdown)
     end
 
-    case Nif.release_master(master_ref) do
-      :ok ->
-        Logger.info("EtherCAT master released successfully")
-        send_status_update(state, :released)
-        {:stop, :normal, :ok, state}
-
-      {:error, reason} ->
-        Logger.error("Failed to release master: #{inspect(reason)}")
-        {:reply, {:error, reason}, state}
-    end
+    :ok = Nif.master_release(master_ref)
+    Logger.info("EtherCAT master released successfully")
+    {:reply, :ok, %{state | master_ref: nil, cyclic_task_pid: nil, active: false}}
   end
 
   @impl true
@@ -533,6 +448,11 @@ defmodule EthercatEx.Master do
   end
 
   @impl true
+  def handle_info({:data_changed, data}, state) do
+    state.module.parse(data)
+    {:noreply, state}
+  end
+
   def handle_info({:EXIT, pid, reason}, %{cyclic_task_pid: pid} = state) do
     Logger.warning("Cyclic task exited with reason: #{inspect(reason)}")
     new_state = %{state | cyclic_task_pid: nil}
@@ -561,13 +481,8 @@ defmodule EthercatEx.Master do
 
     # Release master resource if we have one
     if master_ref do
-      case Nif.release_master(master_ref) do
-        :ok ->
-          Logger.info("Master resource released on termination")
-
-        {:error, reason} ->
-          Logger.error("Failed to release master on termination: #{inspect(reason)}")
-      end
+      :ok = Nif.master_release(master_ref)
+      Logger.info("Master resource released on termination")
     end
 
     :ok
@@ -599,9 +514,6 @@ defmodule EthercatEx.Master do
     end
   end
 
-  defp send_status_update(%{monitor_pid: nil}, _event), do: :ok
-
-  defp send_status_update(%{monitor_pid: pid}, event) when is_pid(pid) do
-    send(pid, {:ethercat_master, event})
-  end
+  # Placeholder for status updates - can be extended later
+  defp send_status_update(_state, _event), do: :ok
 end

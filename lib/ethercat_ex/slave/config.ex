@@ -1,4 +1,4 @@
-defmodule EthercatEx.Slave do
+defmodule EthercatEx.Slave.Config do
   @moduledoc """
   Module for managing EtherCAT slave configs.
 
@@ -6,6 +6,8 @@ defmodule EthercatEx.Slave do
   """
 
   defstruct [:alias, :position, :vendor_id, :product_code, :sync_managers]
+
+  alias EthercatEx.Domain
 
   @type __MODULE__ :: %{
           alias: non_neg_integer(),
@@ -26,7 +28,8 @@ defmodule EthercatEx.Slave do
 
   @type data_object :: %{
           name: String.t(),
-          entry: pdo_entry()
+          entry: pdo_entry(),
+          domain: Domain.name()
         }
 
   @type pdo_entry :: {entry_index(), entry_subindex(), entry_size()}
@@ -96,7 +99,7 @@ defmodule EthercatEx.Slave do
   end
 
   @doc """
-  Adds a new PDO entry to the slave config.
+  Adds a new PDO entry to the slave config. And maps it to the domain.
 
   ## Parameters
 
@@ -105,6 +108,7 @@ defmodule EthercatEx.Slave do
     * `pdo_index` - The index of the PDO
     * `name` - The name of the PDO entry
     * `pdo_entry` - The PDO entry
+    * `domain` - The domain of the PDO entry
 
   """
   @spec add_pdo_entry!(t(), non_neg_integer(), non_neg_integer(), String.t(), pdo_entry()) :: t()
@@ -113,11 +117,12 @@ defmodule EthercatEx.Slave do
         sync_index,
         pdo_index,
         name,
-        pdo_entry
+        pdo_entry,
+        domain \\ nil
       ) do
     sync_managers =
       update_in(sync_managers, [sync_index, :pdos, pdo_index], fn pdo ->
-        pdo ++ [%{name: name, entry: pdo_entry}]
+        pdo ++ [%{name: name, entry: pdo_entry, domain: domain}]
       end)
 
     %{sc | sync_managers: sync_managers}

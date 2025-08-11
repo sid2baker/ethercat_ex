@@ -6,19 +6,18 @@ defmodule EthercatEx.Slave do
   """
   use GenServer
 
-  alias __MODULE__
+  defstruct [:ref, :config]
 
-  defstruct [:config]
-
-  @type __MODULE__ :: %{
+  @type t :: %__MODULE__{
+          ref: reference(),
           config: Slave.t()
         }
 
-  def start_link(config) do
-    GenServer.start_link(__MODULE__, config)
+  def start_link(ref, config) do
+    GenServer.start_link(__MODULE__, {ref, config})
   end
 
-  def init(config) do
-    {:ok, %__MODULE__{config: config}}
+  def init({ref, config}) do
+    {:ok, %__MODULE__{ref: ref, config: config}}
   end
 end

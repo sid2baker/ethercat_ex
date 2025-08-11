@@ -22,14 +22,12 @@ defmodule EthercatEx.Master do
 
   @type t :: %__MODULE__{
           master_ref: reference() | nil,
-          domains: %{domain_id() => Domain.t()},
-          slave_configs: %{slave_config_id() => SlaveConfig.t()},
+          domains: [pid()],
+          slave_configs: [pid()],
           cyclic_task_pid: pid() | nil,
           active: boolean()
         }
 
-  @type domain_id :: reference()
-  @type slave_config_id :: reference()
   @type master_state :: :init | :preop | :safeop | :op
 
   ## Client API
@@ -245,15 +243,11 @@ defmodule EthercatEx.Master do
         _from,
         %{master_ref: master_ref, slave_configs: slave_configs} = state
       ) do
-    # TODO decide where to put position information
-    alias = 0
-    slave_pos = 0
-
     sc =
       Nif.master_slave_config(
         master_ref,
-        alias,
-        slave_pos,
+        slave_config.alias,
+        slave_config.position,
         slave_config.vendor_id,
         slave_config.product_code
       )
@@ -261,15 +255,32 @@ defmodule EthercatEx.Master do
     for {sync_index, sync_manager} <- slave_config.sync_managers do
       Nif.slave_config_pdo_assign_clear(sc, sync_index)
 
-      for {pdo_index, pdo} <- sync_manager.pdos do
+      for {pdo_index, data_objects} <- sync_manager.pdos do
         Nif.slave_config_pdo_assign_add(sc, sync_index, pdo_index)
         Nif.slave_config_pdo_mapping_clear(sc, pdo_index)
 
-        for {entry_index, entry_subindex, entry_size} <- pdo do
+        for %{entry: {entry_index, entry_subindex, entry_size}, domain: domain_name} <-
+              data_objects do
+          domain_ref =
+            case Domain.start_link(name) do
+              {:ok, pid} ->
+                domain = Nif.master_create_domain(state.master_ref)
+                :ok = Domain.set_ref(pid, domain)
+                state = %{state | domains: [domain | state.domains]}
+                domain
+
+              {:error, {:already_started, pid}} ->
+                Domain.get_ref(pid)
+            end
+
           Nif.slave_config_pdo_mapping_add(sc, pdo_index, entry_index, entry_subindex, entry_size)
+          Nif.slave_config_reg_pdo_entry(sc, entry_index, entry_subindex, domain_ref)
         end
       end
     end
+
+    # if everything is ok, start the slave
+    Slave.start_link(sc)
 
     {:reply, {:ok, sc}, %{state | slave_configs: Map.put(slave_configs, sc, slave_config)}}
   end

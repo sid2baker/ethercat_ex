@@ -15,7 +15,7 @@ defmodule EthercatEx.Master do
   defstruct [
     :master_ref,
     :domains,
-    :slave_configs,
+    :slaves,
     :cyclic_task_pid,
     active: false
   ]
@@ -23,7 +23,7 @@ defmodule EthercatEx.Master do
   @type t :: %__MODULE__{
           master_ref: reference() | nil,
           domains: [pid()],
-          slave_configs: [pid()],
+          slaves: [pid()],
           cyclic_task_pid: pid() | nil,
           active: boolean()
         }
@@ -52,58 +52,8 @@ defmodule EthercatEx.Master do
     GenServer.start_link(__MODULE__, opts, name: name)
   end
 
-  @doc """
-  Creates a new domain for process data exchange.
-
-  Returns `{:ok, domain_id}` on success.
-  """
-  def create_domain(server, name) do
-    GenServer.call(server, :create_domain)
-  end
-
   def add_slave_config(server, slave_config) do
     GenServer.call(server, {:add_slave_config, slave_config})
-  end
-
-  @doc """
-  Configures a slave at the specified position.
-
-  ## Parameters
-
-    * `alias` - Slave alias (usually 0)
-    * `position` - Position on the bus
-    * `vendor_id` - Vendor ID of the slave
-    * `product_code` - Product code of the slave
-
-  Returns `{:ok, slave_config_id}` on success.
-  """
-  def configure_slave(server, alias, position, vendor_id, product_code) do
-    GenServer.call(server, {:configure_slave, alias, position, vendor_id, product_code})
-  end
-
-  @doc """
-  Registers a PDO entry for a slave configuration.
-
-  ## Parameters
-
-    * `slave_config_id` - ID of the slave configuration
-    * `entry_index` - PDO entry index
-    * `entry_subindex` - PDO entry subindex
-    * `domain_id` - ID of the domain to register with
-
-  Returns `{:ok, offset}` where offset is the byte offset in the domain.
-  """
-  def register_pdo_entry(
-        server,
-        slave_config_id,
-        entry_index,
-        entry_subindex,
-        domain_id
-      ) do
-    GenServer.call(
-      server,
-      {:register_pdo_entry, slave_config_id, entry_index, entry_subindex, domain_id}
-    )
   end
 
   @doc """
@@ -204,8 +154,8 @@ defmodule EthercatEx.Master do
   def init(opts) do
     state = %__MODULE__{
       master_ref: nil,
-      domains: %{},
-      slave_configs: %{},
+      domains: [],
+      slaves: [],
       cyclic_task_pid: nil,
       active: false
     }
@@ -224,65 +174,58 @@ defmodule EthercatEx.Master do
   end
 
   @impl true
-  def handle_call(:create_domain, _from, %{master_ref: nil} = state) do
-    {:reply, {:error, :no_master}, state}
-  end
-
-  def handle_call(:create_domain, _from, %{master_ref: master_ref, domains: domains} = state) do
-    domain_ref = Nif.master_create_domain(master_ref)
-    domain_id = map_size(domains)
-    new_domains = Map.put(domains, domain_id, domain_ref)
-    new_state = %{state | domains: new_domains}
-    Logger.debug("Created domain with ID: #{domain_id}")
-    {:reply, {:ok, domain_id}, new_state}
-  end
-
-  @impl true
-  def handle_call(
-        {:add_slave_config, slave_config},
-        _from,
-        %{master_ref: master_ref, slave_configs: slave_configs} = state
-      ) do
+  def handle_call({:add_slave_config, slave_config}, _from, state) do
     sc =
       Nif.master_slave_config(
-        master_ref,
+        state.master_ref,
         slave_config.alias,
         slave_config.position,
         slave_config.vendor_id,
         slave_config.product_code
       )
 
-    for {sync_index, sync_manager} <- slave_config.sync_managers do
-      Nif.slave_config_pdo_assign_clear(sc, sync_index)
+    # TODO find a better solution to get current domains
+    domains =
+      for {sync_index, sync_manager} <- slave_config.sync_managers do
+        Nif.slave_config_pdo_assign_clear(sc, sync_index)
 
-      for {pdo_index, data_objects} <- sync_manager.pdos do
-        Nif.slave_config_pdo_assign_add(sc, sync_index, pdo_index)
-        Nif.slave_config_pdo_mapping_clear(sc, pdo_index)
+        for {pdo_index, data_objects} <- sync_manager.pdos do
+          Nif.slave_config_pdo_assign_add(sc, sync_index, pdo_index)
+          Nif.slave_config_pdo_mapping_clear(sc, pdo_index)
 
-        for %{entry: {entry_index, entry_subindex, entry_size}, domain: domain_name} <-
-              data_objects do
-          domain_ref =
-            case Domain.start_link(name) do
-              {:ok, pid} ->
-                domain = Nif.master_create_domain(state.master_ref)
-                :ok = Domain.set_ref(pid, domain)
-                state = %{state | domains: [domain | state.domains]}
-                domain
+          for %{entry: {entry_index, entry_subindex, entry_size}, domain: domain_name} <-
+                data_objects do
+            {domain_ref, domains} =
+              case Domain.start_link(domain_name) do
+                {:ok, pid} ->
+                  domain_ref = Nif.master_create_domain(state.master_ref)
+                  :ok = Domain.set_ref(pid, domain_ref)
+                  {domain_ref, [pid | state.domains]}
 
-              {:error, {:already_started, pid}} ->
-                Domain.get_ref(pid)
-            end
+                {:error, {:already_started, pid}} ->
+                  {Domain.get_ref(pid), state.domains}
+              end
 
-          Nif.slave_config_pdo_mapping_add(sc, pdo_index, entry_index, entry_subindex, entry_size)
-          Nif.slave_config_reg_pdo_entry(sc, entry_index, entry_subindex, domain_ref)
+            Nif.slave_config_pdo_mapping_add(
+              sc,
+              pdo_index,
+              entry_index,
+              entry_subindex,
+              entry_size
+            )
+
+            Nif.slave_config_reg_pdo_entry(sc, entry_index, entry_subindex, domain_ref)
+            domains
+          end
         end
       end
-    end
+      |> List.flatten()
+      |> Enum.uniq()
 
     # if everything is ok, start the slave
-    Slave.start_link(sc)
+    {:ok, slave} = Slave.start_link(sc)
 
-    {:reply, {:ok, sc}, %{state | slave_configs: Map.put(slave_configs, sc, slave_config)}}
+    {:reply, {:ok, sc}, %{state | domains: domains, slaves: [slave | state.slaves]}}
   end
 
   @impl true

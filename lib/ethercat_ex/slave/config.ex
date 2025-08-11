@@ -9,7 +9,7 @@ defmodule EthercatEx.Slave.Config do
 
   alias EthercatEx.Domain
 
-  @type __MODULE__ :: %{
+  @type t :: %__MODULE__{
           alias: non_neg_integer(),
           position: non_neg_integer(),
           vendor_id: non_neg_integer(),
@@ -70,7 +70,7 @@ defmodule EthercatEx.Slave.Config do
     * `watchdog_mode` - The watchdog mode of the sync manager
 
   """
-  @spec add_sync_manager!(t(), integer(), direction(), watchog_mode()) :: t()
+  @spec add_sync_manager!(t(), integer(), direction(), watchdog_mode()) :: t()
   def add_sync_manager!(sc, sync_index, direction, watchdog_mode) do
     sync_managers =
       Map.put(sc.sync_managers, sync_index, %{
@@ -126,21 +126,5 @@ defmodule EthercatEx.Slave.Config do
       end)
 
     %{sc | sync_managers: sync_managers}
-  end
-
-  @doc """
-  Gets all data objects from the slave config.
-
-  ## Parameters
-
-    * `sc` - The slave config to get the data objects from
-
-  """
-  @spec get_data_objects(t()) :: [data_object()]
-  def get_data_objects(%{sync_managers: sync_managers} = sc) do
-    sync_managers
-    |> Map.values()
-    |> Enum.flat_map(&Map.values(&1.pdos))
-    |> Enum.flat_map(&Map.values(&1))
   end
 end

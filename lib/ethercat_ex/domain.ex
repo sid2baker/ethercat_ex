@@ -7,15 +7,14 @@ defmodule EthercatEx.Domain do
   """
   use GenServer
 
-  defstruct [:name, :ref]
+  defstruct [:ref]
 
   @type t :: %__MODULE__{
-          name: atom(),
           ref: reference()
         }
 
   def start_link(name) do
-    GenServer.start_link(__MODULE__, ref, name: name)
+    GenServer.start_link(__MODULE__, [], name: name)
   end
 
   def set_ref(domain, ref) do
@@ -26,8 +25,8 @@ defmodule EthercatEx.Domain do
     GenServer.call(domain, :get_ref)
   end
 
-  def init({name, ref}) do
-    {:ok, %__MODULE__{name: name, ref: ref}}
+  def init(_) do
+    {:ok, %__MODULE__{}}
   end
 
   def handle_call({:set_ref, ref}, _from, state) do

@@ -10,18 +10,7 @@ defmodule EthercatEx.Master do
   use GenServer
   require Logger
 
-  alias EthercatEx.Nif
-
-  @type master_state :: :init | :preop | :safeop | :op
-
-  @type slave_info :: %{
-          position: non_neg_integer(),
-          vendor_id: non_neg_integer(),
-          product_code: non_neg_integer(),
-          revision_number: non_neg_integer(),
-          serial_number: non_neg_integer(),
-          al_state: master_state()
-        }
+  alias EthercatEx.{Nif, Domain, SlaveConfig}
 
   defstruct [
     :master_ref,
@@ -33,11 +22,15 @@ defmodule EthercatEx.Master do
 
   @type t :: %__MODULE__{
           master_ref: reference() | nil,
-          domains: %{non_neg_integer() => reference()},
-          slave_configs: %{non_neg_integer() => reference()},
+          domains: %{domain_id() => Domain.t()},
+          slave_configs: %{slave_config_id() => SlaveConfig.t()},
           cyclic_task_pid: pid() | nil,
           active: boolean()
         }
+
+  @type domain_id :: reference()
+  @type slave_config_id :: reference()
+  @type master_state :: :init | :preop | :safeop | :op
 
   ## Client API
 
@@ -68,6 +61,10 @@ defmodule EthercatEx.Master do
   """
   def create_domain(server, name) do
     GenServer.call(server, :create_domain)
+  end
+
+  def add_slave_config(server, slave_config) do
+    GenServer.call(server, {:add_slave_config, slave_config})
   end
 
   @doc """
@@ -243,27 +240,23 @@ defmodule EthercatEx.Master do
   end
 
   @impl true
-  def handle_call(
-        {:configure_slave, alias, position, vendor_id, product_code},
-        _from,
-        %{master_ref: nil} = state
-      ) do
-    {:reply, {:error, :no_master}, state}
-  end
+  def handle_call({:add_slave_config, slave_config}, _from, %{master_ref: master_ref, slave_configs: slave_configs} = state) do
+    # TODO decide where to put position information
+    alias = 0
+    slave_pos = 0
+    sc = Nif.master_slave_config(master_ref, alias, slave_pos, slave_config.vendor_id, slave_config.product_code)
+    for {sync_index, sync_manager} <- slave_config.sync_managers do
+      Nif.slave_config_pdo_assign_clear(sc, sync_index)
+      for {pdo_index, pdo} <- sync_manager.pdos do
+        Nif.slave_config_pdo_assign_add(sc, sync_index, pdo_index)
+        Nif.slave_config_pdo_mapping_clear(sc, pdo_index)
+        for {entry_index, entry_subindex, entry_size} <- pdo do
+          Nif.slave_config_pdo_mapping_add(sc, pdo_index, entry_index, entry_subindex, entry_size)
+        end
+      end
+    end
 
-  def handle_call(
-        {:configure_slave, alias, position, vendor_id, product_code},
-        _from,
-        %{master_ref: master_ref, slave_configs: configs} = state
-      ) do
-    slave_config_ref = Nif.master_slave_config(master_ref, alias, position, vendor_id, product_code)
-    config_id = map_size(configs)
-
-    new_configs = Map.put(configs, config_id, slave_config_ref)
-
-    new_state = %{state | slave_configs: new_configs}
-    Logger.debug("Configured slave at position #{position} with ID: #{config_id}")
-    {:reply, {:ok, config_id}, new_state}
+    {:reply, {:ok, sc}, %{state | slave_configs: Map.put(slave_configs, sc, slave_config)}}
   end
 
   @impl true
@@ -274,13 +267,14 @@ defmodule EthercatEx.Master do
       ) do
     with {:ok, slave_config_ref} <- Map.fetch(configs, slave_config_id),
          {:ok, domain_ref} <- Map.fetch(domains, domain_id) do
-      offset = Nif.ecrt_slave_config_reg_pdo_entry(
-        slave_config_ref,
-        entry_index,
-        entry_subindex,
-        domain_ref,
-        0
-      )
+      offset =
+        Nif.ecrt_slave_config_reg_pdo_entry(
+          slave_config_ref,
+          entry_index,
+          entry_subindex,
+          domain_ref,
+          0
+        )
 
       Logger.debug(
         "Registered PDO entry: index=0x#{Integer.to_string(entry_index, 16)}, subindex=0x#{Integer.to_string(entry_subindex, 16)}, offset=#{offset}"

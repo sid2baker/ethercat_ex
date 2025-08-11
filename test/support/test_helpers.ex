@@ -1,9 +1,12 @@
 defmodule EthercatEx.TestHelpers do
   alias EthercatEx.Nif
+
   def create_input_card(sc, domain) do
     sync_index = 2
-    direction = 1 # Output
-    watchdog = 0 # Disabled
+    # Output
+    direction = 1
+    # Disabled
+    watchdog = 0
     pdo_index = 0x1A00
     entry_index = 0x6000
     entry_subindex = 0x01
@@ -20,8 +23,10 @@ defmodule EthercatEx.TestHelpers do
 
   def create_output_card(sc, domain) do
     sync_index = 3
-    direction = 2 # Input
-    watchdog = 0 # Disabled
+    # Input
+    direction = 2
+    # Disabled
+    watchdog = 0
     pdo_index = 0x1600
     entry_index = 0x7000
     entry_subindex = 0x01

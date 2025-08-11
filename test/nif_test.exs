@@ -56,6 +56,7 @@ defmodule EthernetEx.NifTest do
   test "create slave config" do
     master = Nif.request_master()
     Nif.master_slave_config(master, 0, 0, 0xFF11, 0xFF22)
+
     Nif.master_slave_config(master, 0, 0, 0xFF11, 0xFF23)
     |> IO.inspect()
   end
@@ -72,8 +73,10 @@ defmodule EthernetEx.NifTest do
     entry_index = 0x6000
     entry_subindex = 0x00
     entry_bit_length = 1
-    direction = 2 # EC_DIR_INPUT
-    watchdog = 0 # EC_WD_DEFAULT
+    # EC_DIR_INPUT
+    direction = 2
+    # EC_WD_DEFAULT
+    watchdog = 0
 
     sc = Nif.master_slave_config(master, alias, slave_pos, 0xFF11, 0xFF22)
 

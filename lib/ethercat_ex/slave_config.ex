@@ -1,4 +1,4 @@
-defmodule EthercatEx.Slave do
+defmodule EthercatEx.SlaveConfig do
   @moduledoc """
   Module for managing EtherCAT slaves.
 
@@ -9,16 +9,16 @@ defmodule EthercatEx.Slave do
   defstruct [:vendor_id, :product_code, :sync_managers]
 
   @type __MODULE__ :: %{
-    vendor_id: non_neg_integer(),
-    product_code: non_neg_integer(),
-    sync_managers: %{non_neg_integer() => sync_manager()},
-  }
+          vendor_id: non_neg_integer(),
+          product_code: non_neg_integer(),
+          sync_managers: %{non_neg_integer() => sync_manager()}
+        }
 
   @type sync_manager :: %{
-  direction: :input | :output,
-  watchdog_mode: :default | :enable | :disable,
-  pdos: %{non_neg_integer() => [pdo_entry()]}
-  }
+          direction: :input | :output,
+          watchdog_mode: :default | :enable | :disable,
+          pdos: %{non_neg_integer() => [pdo_entry()]}
+        }
 
   @type pdo_entry :: {entry_index(), entry_subindex(), entry_size()}
 
@@ -42,13 +42,13 @@ defmodule EthercatEx.Slave do
 
   """
   def create(vendor_id, product_code) do
-    slave =  %__MODULE__{
+    sc = %__MODULE__{
       vendor_id: vendor_id,
       product_code: product_code,
       sync_managers: %{}
     }
 
-    {:ok, slave}
+    {:ok, sc}
   end
 
   @doc """
@@ -56,38 +56,44 @@ defmodule EthercatEx.Slave do
 
   ## Parameters
 
-    * `slave` - The slave to add the sync manager to
+    * `sc` - The slave config to add the sync manager to
     * `sync_index` - The index of the sync manager
     * `direction` - The direction of the sync manager
     * `watchdog_mode` - The watchdog mode of the sync manager
 
   """
-  def add_sync_manager!(slave, sync_index, direction, watchdog_mode \\ :default) do
-    sync_managers = Map.put(slave.sync_managers, sync_index, %{direction: direction, watchdog_mode: watchdog_mode, pdos: %{}})
-    %{slave | sync_managers: sync_managers}
+  def add_sync_manager!(sc, sync_index, direction, watchdog_mode \\ :default) do
+    sync_managers =
+      Map.put(sc.sync_managers, sync_index, %{
+        direction: direction,
+        watchdog_mode: watchdog_mode,
+        pdos: %{}
+      })
+
+    %{sc | sync_managers: sync_managers}
   end
 
   @doc """
-  Adds a new PDO assignment to the slave.
+  Adds a new PDO assignment to the slave config.
 
   ## Parameters
 
-    * `slave` - The slave to add the PDO assignment to
+    * `sc` - The slave config to add the PDO assignment to
     * `sync_index` - The index of the sync manager
     * `pdo_index` - The index of the PDO
 
   """
-  def add_pdo_assignment!(%{sync_managers: sync_managers} = slave, sync_index, pdo_index) do
+  def add_pdo_assignment!(%{sync_managers: sync_managers} = sc, sync_index, pdo_index) do
     sync_managers = update_in(sync_managers, [sync_index, :pdos], &Map.put(&1, pdo_index, []))
-    %{slave | sync_managers: sync_managers}
+    %{sc | sync_managers: sync_managers}
   end
 
   @doc """
-  Adds a new PDO entry to the slave.
+  Adds a new PDO entry to the slave config.
 
   ## Parameters
 
-    * `slave` - The slave to add the PDO entry to
+    * `sc` - The slave config to add the PDO entry to
     * `sync_index` - The index of the sync manager
     * `pdo_index` - The index of the PDO
     * `entry_index` - The index of the entry
@@ -95,10 +101,19 @@ defmodule EthercatEx.Slave do
     * `entry_size` - The size of the entry
 
   """
-  def add_pdo_entry!(%{sync_managers: sync_managers} = slave, sync_index, pdo_index, entry_index, entry_subindex, entry_size) do
-    sync_managers = update_in(sync_managers, [sync_index, :pdos, pdo_index], fn pdo ->
-      pdo ++ [{entry_index, entry_subindex, entry_size}]
-    end)
-    %{slave | sync_managers: sync_managers}
+  def add_pdo_entry!(
+        %{sync_managers: sync_managers} = sc,
+        sync_index,
+        pdo_index,
+        entry_index,
+        entry_subindex,
+        entry_size
+      ) do
+    sync_managers =
+      update_in(sync_managers, [sync_index, :pdos, pdo_index], fn pdo ->
+        pdo ++ [{entry_index, entry_subindex, entry_size}]
+      end)
+
+    %{sc | sync_managers: sync_managers}
   end
 end

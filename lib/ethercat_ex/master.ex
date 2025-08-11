@@ -240,16 +240,31 @@ defmodule EthercatEx.Master do
   end
 
   @impl true
-  def handle_call({:add_slave_config, slave_config}, _from, %{master_ref: master_ref, slave_configs: slave_configs} = state) do
+  def handle_call(
+        {:add_slave_config, slave_config},
+        _from,
+        %{master_ref: master_ref, slave_configs: slave_configs} = state
+      ) do
     # TODO decide where to put position information
     alias = 0
     slave_pos = 0
-    sc = Nif.master_slave_config(master_ref, alias, slave_pos, slave_config.vendor_id, slave_config.product_code)
+
+    sc =
+      Nif.master_slave_config(
+        master_ref,
+        alias,
+        slave_pos,
+        slave_config.vendor_id,
+        slave_config.product_code
+      )
+
     for {sync_index, sync_manager} <- slave_config.sync_managers do
       Nif.slave_config_pdo_assign_clear(sc, sync_index)
+
       for {pdo_index, pdo} <- sync_manager.pdos do
         Nif.slave_config_pdo_assign_add(sc, sync_index, pdo_index)
         Nif.slave_config_pdo_mapping_clear(sc, pdo_index)
+
         for {entry_index, entry_subindex, entry_size} <- pdo do
           Nif.slave_config_pdo_mapping_add(sc, pdo_index, entry_index, entry_subindex, entry_size)
         end

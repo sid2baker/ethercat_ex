@@ -53,10 +53,11 @@ defmodule EthercatEx.SlaveConfigTest do
     end
 
     test "adds multiple sync managers", %{sc: sc} do
-      updated_sc = sc
-                    |> SlaveConfig.add_sync_manager!(0, :input, :default)
-                    |> SlaveConfig.add_sync_manager!(1, :output, :enable)
-                    |> SlaveConfig.add_sync_manager!(2, :input, :disable)
+      updated_sc =
+        sc
+        |> SlaveConfig.add_sync_manager!(0, :input, :default)
+        |> SlaveConfig.add_sync_manager!(1, :output, :enable)
+        |> SlaveConfig.add_sync_manager!(2, :input, :disable)
 
       assert map_size(updated_sc.sync_managers) == 3
       assert updated_sc.sync_managers[0].direction == :input
@@ -66,9 +67,10 @@ defmodule EthercatEx.SlaveConfigTest do
     end
 
     test "overwrites existing sync manager at same index", %{sc: sc} do
-      updated_sc = sc
-                    |> SlaveConfig.add_sync_manager!(0, :input, :default)
-                    |> SlaveConfig.add_sync_manager!(0, :output, :enable)
+      updated_sc =
+        sc
+        |> SlaveConfig.add_sync_manager!(0, :input, :default)
+        |> SlaveConfig.add_sync_manager!(0, :output, :enable)
 
       assert map_size(updated_sc.sync_managers) == 1
       sync_manager = updated_sc.sync_managers[0]
@@ -93,10 +95,11 @@ defmodule EthercatEx.SlaveConfigTest do
     end
 
     test "adds multiple PDO assignments to same sync manager", %{sc: sc} do
-      updated_sc = sc
-                    |> SlaveConfig.add_pdo_assignment!(0, 0x1600)
-                    |> SlaveConfig.add_pdo_assignment!(0, 0x1601)
-                    |> SlaveConfig.add_pdo_assignment!(0, 0x1602)
+      updated_sc =
+        sc
+        |> SlaveConfig.add_pdo_assignment!(0, 0x1600)
+        |> SlaveConfig.add_pdo_assignment!(0, 0x1601)
+        |> SlaveConfig.add_pdo_assignment!(0, 0x1602)
 
       sync_manager = updated_sc.sync_managers[0]
       assert map_size(sync_manager.pdos) == 3
@@ -106,10 +109,11 @@ defmodule EthercatEx.SlaveConfigTest do
     end
 
     test "adds PDO assignments to different sync managers", %{sc: sc} do
-      updated_sc = sc
-                    |> SlaveConfig.add_sync_manager!(1, :output)
-                    |> SlaveConfig.add_pdo_assignment!(0, 0x1600)
-                    |> SlaveConfig.add_pdo_assignment!(1, 0x1A00)
+      updated_sc =
+        sc
+        |> SlaveConfig.add_sync_manager!(1, :output)
+        |> SlaveConfig.add_pdo_assignment!(0, 0x1600)
+        |> SlaveConfig.add_pdo_assignment!(1, 0x1A00)
 
       assert Map.has_key?(updated_sc.sync_managers[0].pdos, 0x1600)
       assert Map.has_key?(updated_sc.sync_managers[1].pdos, 0x1A00)
@@ -119,9 +123,12 @@ defmodule EthercatEx.SlaveConfigTest do
   describe "add_pdo_entry!/6" do
     setup do
       {:ok, sc} = SlaveConfig.create(0xFF11, 0xFF22)
-      sc = sc
-           |> SlaveConfig.add_sync_manager!(0, :input)
-           |> SlaveConfig.add_pdo_assignment!(0, 0x1600)
+
+      sc =
+        sc
+        |> SlaveConfig.add_sync_manager!(0, :input)
+        |> SlaveConfig.add_pdo_assignment!(0, 0x1600)
+
       {:ok, sc: sc}
     end
 
@@ -134,10 +141,11 @@ defmodule EthercatEx.SlaveConfigTest do
     end
 
     test "adds multiple PDO entries to same PDO", %{sc: sc} do
-      updated_sc = sc
-                    |> SlaveConfig.add_pdo_entry!(0, 0x1600, 0x6000, 0x01, 8)
-                    |> SlaveConfig.add_pdo_entry!(0, 0x1600, 0x6000, 0x02, 16)
-                    |> SlaveConfig.add_pdo_entry!(0, 0x1600, 0x1601, 0x01, 32)
+      updated_sc =
+        sc
+        |> SlaveConfig.add_pdo_entry!(0, 0x1600, 0x6000, 0x01, 8)
+        |> SlaveConfig.add_pdo_entry!(0, 0x1600, 0x6000, 0x02, 16)
+        |> SlaveConfig.add_pdo_entry!(0, 0x1600, 0x1601, 0x01, 32)
 
       pdo_entries = updated_sc.sync_managers[0].pdos[0x1600]
       assert length(pdo_entries) == 3
@@ -147,25 +155,29 @@ defmodule EthercatEx.SlaveConfigTest do
     end
 
     test "preserves order of PDO entries", %{sc: sc} do
-      updated_sc = sc
-                    |> SlaveConfig.add_pdo_entry!(0, 0x1600, 0x6000, 0x01, 8)
-                    |> SlaveConfig.add_pdo_entry!(0, 0x1600, 0x6000, 0x02, 16)
-                    |> SlaveConfig.add_pdo_entry!(0, 0x1600, 0x1601, 0x01, 32)
+      updated_sc =
+        sc
+        |> SlaveConfig.add_pdo_entry!(0, 0x1600, 0x6000, 0x01, 8)
+        |> SlaveConfig.add_pdo_entry!(0, 0x1600, 0x6000, 0x02, 16)
+        |> SlaveConfig.add_pdo_entry!(0, 0x1600, 0x1601, 0x01, 32)
 
       pdo_entries = updated_sc.sync_managers[0].pdos[0x1600]
+
       expected_entries = [
         {0x6000, 0x01, 8},
         {0x6000, 0x02, 16},
         {0x1601, 0x01, 32}
       ]
+
       assert pdo_entries == expected_entries
     end
 
     test "adds entries to different PDOs", %{sc: sc} do
-      updated_sc = sc
-                    |> SlaveConfig.add_pdo_assignment!(0, 0x1601)
-                    |> SlaveConfig.add_pdo_entry!(0, 0x1600, 0x6000, 0x01, 8)
-                    |> SlaveConfig.add_pdo_entry!(0, 0x1601, 0x6010, 0x01, 16)
+      updated_sc =
+        sc
+        |> SlaveConfig.add_pdo_assignment!(0, 0x1601)
+        |> SlaveConfig.add_pdo_entry!(0, 0x1600, 0x6000, 0x01, 8)
+        |> SlaveConfig.add_pdo_entry!(0, 0x1601, 0x6010, 0x01, 16)
 
       pdo_entries_1600 = updated_sc.sync_managers[0].pdos[0x1600]
       pdo_entries_1601 = updated_sc.sync_managers[0].pdos[0x1601]
@@ -181,18 +193,20 @@ defmodule EthercatEx.SlaveConfigTest do
     test "creates a complete slave config" do
       {:ok, sc} = SlaveConfig.create(0x1234, 0x5678)
 
-      sc = sc
-           |> SlaveConfig.add_sync_manager!(2, :input, :enable)
-           |> SlaveConfig.add_pdo_assignment!(2, 0x1600)
-           |> SlaveConfig.add_pdo_entry!(2, 0x1600, 0x6000, 0x01, 8)
-           |> SlaveConfig.add_pdo_entry!(2, 0x1600, 0x6000, 0x02, 16)
+      sc =
+        sc
+        |> SlaveConfig.add_sync_manager!(2, :input, :enable)
+        |> SlaveConfig.add_pdo_assignment!(2, 0x1600)
+        |> SlaveConfig.add_pdo_entry!(2, 0x1600, 0x6000, 0x01, 8)
+        |> SlaveConfig.add_pdo_entry!(2, 0x1600, 0x6000, 0x02, 16)
 
-      sc = sc
-           |> SlaveConfig.add_sync_manager!(3, :output, :disable)
-           |> SlaveConfig.add_pdo_assignment!(3, 0x1A00)
-           |> SlaveConfig.add_pdo_assignment!(3, 0x1A01)
-           |> SlaveConfig.add_pdo_entry!(3, 0x1A00, 0x7000, 0x01, 8)
-           |> SlaveConfig.add_pdo_entry!(3, 0x1A01, 0x7010, 0x01, 32)
+      sc =
+        sc
+        |> SlaveConfig.add_sync_manager!(3, :output, :disable)
+        |> SlaveConfig.add_pdo_assignment!(3, 0x1A00)
+        |> SlaveConfig.add_pdo_assignment!(3, 0x1A01)
+        |> SlaveConfig.add_pdo_entry!(3, 0x1A00, 0x7000, 0x01, 8)
+        |> SlaveConfig.add_pdo_entry!(3, 0x1A01, 0x7010, 0x01, 32)
 
       assert sc.vendor_id == 0x1234
       assert sc.product_code == 0x5678
@@ -217,10 +231,11 @@ defmodule EthercatEx.SlaveConfigTest do
     test "handles zero values in PDO entries" do
       {:ok, sc} = SlaveConfig.create(0xFF11, 0xFF22)
 
-      sc = sc
-           |> SlaveConfig.add_sync_manager!(0, :input)
-           |> SlaveConfig.add_pdo_assignment!(0, 0)
-           |> SlaveConfig.add_pdo_entry!(0, 0, 0, 0, 0)
+      sc =
+        sc
+        |> SlaveConfig.add_sync_manager!(0, :input)
+        |> SlaveConfig.add_pdo_assignment!(0, 0)
+        |> SlaveConfig.add_pdo_entry!(0, 0, 0, 0, 0)
 
       pdo_entries = sc.sync_managers[0].pdos[0]
       assert {0, 0, 0} in pdo_entries
@@ -229,10 +244,11 @@ defmodule EthercatEx.SlaveConfigTest do
     test "handles maximum values" do
       {:ok, sc} = SlaveConfig.create(0xFFFFFFFF, 0xFFFFFFFF)
 
-      sc = sc
-           |> SlaveConfig.add_sync_manager!(255, :output)
-           |> SlaveConfig.add_pdo_assignment!(255, 0xFFFF)
-           |> SlaveConfig.add_pdo_entry!(255, 0xFFFF, 0xFFFF, 0xFF, 0xFFFF)
+      sc =
+        sc
+        |> SlaveConfig.add_sync_manager!(255, :output)
+        |> SlaveConfig.add_pdo_assignment!(255, 0xFFFF)
+        |> SlaveConfig.add_pdo_entry!(255, 0xFFFF, 0xFFFF, 0xFF, 0xFFFF)
 
       assert sc.vendor_id == 0xFFFFFFFF
       assert sc.product_code == 0xFFFFFFFF

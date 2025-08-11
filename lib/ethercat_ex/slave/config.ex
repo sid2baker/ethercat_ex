@@ -1,23 +1,32 @@
-defmodule EthercatEx.SlaveConfig do
+defmodule EthercatEx.Slave do
   @moduledoc """
-  Module for managing EtherCAT slaves.
+  Module for managing EtherCAT slave configs.
 
-  This module provides functions for configuring slaves, managing PDO mappings,
-  sync managers, and handling slave-specific operations.
+  This module provides functions for creating and managing EtherCAT slave configurations.
   """
 
-  defstruct [:vendor_id, :product_code, :sync_managers]
+  defstruct [:alias, :position, :vendor_id, :product_code, :sync_managers]
 
   @type __MODULE__ :: %{
+          alias: non_neg_integer(),
+          position: non_neg_integer(),
           vendor_id: non_neg_integer(),
           product_code: non_neg_integer(),
           sync_managers: %{non_neg_integer() => sync_manager()}
         }
 
   @type sync_manager :: %{
-          direction: :input | :output,
-          watchdog_mode: :default | :enable | :disable,
-          pdos: %{non_neg_integer() => [pdo_entry()]}
+          direction: direction(),
+          watchdog_mode: watchdog_mode(),
+          pdos: %{non_neg_integer() => [data_object()]}
+        }
+
+  @type direction :: :input | :output
+  @type watchdog_mode :: :default | :enable | :disable
+
+  @type data_object :: %{
+          name: String.t(),
+          entry: pdo_entry()
         }
 
   @type pdo_entry :: {entry_index(), entry_subindex(), entry_size()}
@@ -26,14 +35,8 @@ defmodule EthercatEx.SlaveConfig do
   @type entry_subindex :: non_neg_integer()
   @type entry_size :: non_neg_integer()
 
-  # AL State constants from EtherCAT specification
-  @al_state_init 0x01
-  @al_state_preop 0x02
-  @al_state_safeop 0x04
-  @al_state_op 0x08
-
   @doc """
-  Creates a new slave with sane defaults.
+  Creates a new slave config with sane defaults.
 
   ## Parameters
 
@@ -41,8 +44,10 @@ defmodule EthercatEx.SlaveConfig do
     * `product_code` - Product code of the slave
 
   """
-  def create(vendor_id, product_code) do
+  def create(alias, position, vendor_id, product_code) do
     sc = %__MODULE__{
+      alias: alias,
+      position: position,
       vendor_id: vendor_id,
       product_code: product_code,
       sync_managers: %{}
@@ -52,7 +57,7 @@ defmodule EthercatEx.SlaveConfig do
   end
 
   @doc """
-  Adds a new sync manager to the slave.
+  Adds a new sync manager to the slave config.
 
   ## Parameters
 
@@ -62,7 +67,8 @@ defmodule EthercatEx.SlaveConfig do
     * `watchdog_mode` - The watchdog mode of the sync manager
 
   """
-  def add_sync_manager!(sc, sync_index, direction, watchdog_mode \\ :default) do
+  @spec add_sync_manager!(t(), integer(), direction(), watchog_mode()) :: t()
+  def add_sync_manager!(sc, sync_index, direction, watchdog_mode) do
     sync_managers =
       Map.put(sc.sync_managers, sync_index, %{
         direction: direction,
@@ -83,6 +89,7 @@ defmodule EthercatEx.SlaveConfig do
     * `pdo_index` - The index of the PDO
 
   """
+  @spec add_pdo_assignment!(t(), non_neg_integer(), non_neg_integer()) :: t()
   def add_pdo_assignment!(%{sync_managers: sync_managers} = sc, sync_index, pdo_index) do
     sync_managers = update_in(sync_managers, [sync_index, :pdos], &Map.put(&1, pdo_index, []))
     %{sc | sync_managers: sync_managers}
@@ -96,24 +103,39 @@ defmodule EthercatEx.SlaveConfig do
     * `sc` - The slave config to add the PDO entry to
     * `sync_index` - The index of the sync manager
     * `pdo_index` - The index of the PDO
-    * `entry_index` - The index of the entry
-    * `entry_subindex` - The subindex of the entry
-    * `entry_size` - The size of the entry
+    * `name` - The name of the PDO entry
+    * `pdo_entry` - The PDO entry
 
   """
+  @spec add_pdo_entry!(t(), non_neg_integer(), non_neg_integer(), String.t(), pdo_entry()) :: t()
   def add_pdo_entry!(
         %{sync_managers: sync_managers} = sc,
         sync_index,
         pdo_index,
-        entry_index,
-        entry_subindex,
-        entry_size
+        name,
+        pdo_entry
       ) do
     sync_managers =
       update_in(sync_managers, [sync_index, :pdos, pdo_index], fn pdo ->
-        pdo ++ [{entry_index, entry_subindex, entry_size}]
+        pdo ++ [%{name: name, entry: pdo_entry}]
       end)
 
     %{sc | sync_managers: sync_managers}
+  end
+
+  @doc """
+  Gets all data objects from the slave config.
+
+  ## Parameters
+
+    * `sc` - The slave config to get the data objects from
+
+  """
+  @spec get_data_objects(t()) :: [data_object()]
+  def get_data_objects(%{sync_managers: sync_managers} = sc) do
+    sync_managers
+    |> Map.values()
+    |> Enum.flat_map(&Map.values(&1.pdos))
+    |> Enum.flat_map(&Map.values(&1))
   end
 end

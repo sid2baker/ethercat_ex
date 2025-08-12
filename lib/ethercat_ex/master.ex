@@ -309,28 +309,12 @@ defmodule EthercatEx.Master do
       ) do
     parent_pid = self()
 
-    domain_configs =
-      Enum.map(domains, fn pid ->
-        %{
-          pid: pid,
-          resource: Domain.get_ref(pid),
-          interval: 0
-        }
-        |> IO.inspect()
-      end)
-
-    slave_configs =
-      Enum.map(slaves, fn pid ->
-        %{
-          pid: pid,
-          resource: Slave.get_config_ref(pid)
-        }
-        |> IO.inspect()
-      end)
+    domain_refs = Enum.map(domains, &Domain.get_ref/1)
+    slave_config_refs = Enum.map(slaves, &Slave.get_config_ref/1)
 
     task_pid =
       spawn_link(fn ->
-        Nif.cyclic_task(parent_pid, master_ref, domain_configs, slave_configs)
+        Nif.cyclic_task(parent_pid, master_ref, domains, domain_refs, slaves, slave_config_refs)
       end)
 
     new_state = %{state | cyclic_task_pid: task_pid}

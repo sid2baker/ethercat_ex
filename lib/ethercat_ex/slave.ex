@@ -6,10 +6,10 @@ defmodule EthercatEx.Slave do
   """
   use GenServer
 
-  defstruct [:ref, :config]
+  defstruct [:config_ref, :config]
 
   @type t :: %__MODULE__{
-          ref: reference(),
+          config_ref: reference(),
           config: Slave.t()
         }
 
@@ -17,7 +17,15 @@ defmodule EthercatEx.Slave do
     GenServer.start_link(__MODULE__, {ref, config})
   end
 
+  def get_config_ref(slave) do
+    GenServer.call(slave, :get_config_ref)
+  end
+
   def init({ref, config}) do
-    {:ok, %__MODULE__{ref: ref, config: config}}
+    {:ok, %__MODULE__{config_ref: ref, config: config}}
+  end
+
+  def handle_call(:get_config_ref, _from, state) do
+    {:reply, state.config_ref, state}
   end
 end

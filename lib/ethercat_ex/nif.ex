@@ -235,21 +235,28 @@ defmodule EthercatEx.Nif do
       //return beam.make(pdo, .{});
   }
 
-  pub fn cyclic_task(pid: beam.pid, master_resource: MasterResource, domain_resources: []DomainResource, slave_resources: []SlaveConfigResource) !void {
+  pub const DomainConfig = struct {
+      pid: beam.pid,
+      resource: DomainResource,
+      state: ecrt.ec_domain_state_t,
+      prev_data: []u8,
+      data: []u8,
+      interval: u32, // Interval in milliseconds
+  };
+
+  pub const SlaveConfig = struct {
+      pid: beam.pid,
+      resource: SlaveConfigResource,
+      state: ec_slave_config_state_t,
+  };
+
+  pub fn cyclic_task(master_pid: beam.pid, master_resource: MasterResource, domain_configs: []DomainConfig, slave_configs: []SlaveConfig) !void {
       const master = master_resource.unpack();
       var master_state: ec_master_state_t = undefined;
       var prev_master_state: ec_master_state_t = undefined;
 
-      var domains = std.ArrayList(struct {
-          domain: *ecrt.ec_domain_t,
-          state: ecrt.ec_domain_state_t,
-          prev_data: []u8,
-          data: []u8,
-      }).init(beam.allocator);
-      defer domains.deinit();
-
-      for (domain_resources) |domain_resource| {
-          const domain = domain_resource.unpack();
+      for (domain_configs) |*domain_config| {
+          const domain = domain_config.resource.unpack();
           const size = ecrt.ecrt_domain_size(domain);
           const data_ptr = ecrt.ecrt_domain_data(domain);
           if (data_ptr == null or size == 0) {
@@ -260,21 +267,13 @@ defmodule EthercatEx.Nif do
           const prev_data: []u8 = beam.allocator.alloc(u8, size) catch return error.OutOfMemory;
           @memcpy(prev_data, data);
 
-          try domains.append(.{ .domain = domain, .state = undefined, .prev_data = prev_data, .data = data });
-      }
-
-      var slaves = std.ArrayList(struct {
-          slave: *ecrt.ec_slave_config_t,
-          state: ec_slave_config_state_t,
-      }).init(beam.allocator);
-      defer slaves.deinit();
-
-      for (slave_resources) |slave_resource| {
-          try slaves.append(.{ .slave = slave_resource.unpack(), .state = undefined });
+          domain_config.state = undefined;
+          domain_config.prev_data = prev_data;
+          domain_config.data = data;
       }
 
       defer {
-          beam.send(pid, .killed, .{}) catch {};
+          beam.send(master_pid, .killed, .{}) catch {};
       }
 
       while (true) {
@@ -283,23 +282,24 @@ defmodule EthercatEx.Nif do
           _ = ecrt.ecrt_master_state(master, @ptrCast(&master_state));
 
           if (master_state.slaves_responding != prev_master_state.slaves_responding) {
-              _ = try beam.send(pid, .slaves_responding, .{master_state.slaves_responding});
+              _ = try beam.send(master_pid, .slaves_responding, .{master_state.slaves_responding});
           }
           if (master_state.al_states != prev_master_state.al_states) {
-              _ = try beam.send(pid, .al_states, .{master_state.al_states});
+              _ = try beam.send(master_pid, .al_states, .{master_state.al_states});
           }
           if (master_state.link_up != prev_master_state.link_up) {
-              _ = try beam.send(pid, .link_up, .{master_state.link_up});
+              _ = try beam.send(master_pid, .link_up, .{master_state.link_up});
           }
           prev_master_state = master_state;
 
           // Process all domains
-          for (domains.items, 0..) |tuple, i| {
-              const domain = tuple.domain;
-              const prev_state = tuple.state;
+          for (domain_configs) |*domain_config| {
+              const pid = domain_config.pid;
+              const domain = domain_config.resource.unpack();
+              const prev_state = domain_config.state;
               var state: ecrt.ec_domain_state_t = undefined;
-              const prev_data = tuple.prev_data;
-              const data = tuple.data;
+              const prev_data = domain_config.prev_data;
+              const data = domain_config.data;
 
               _ = ecrt.ecrt_domain_process(domain);
               _ = ecrt.ecrt_domain_state(domain, &state);
@@ -316,15 +316,18 @@ defmodule EthercatEx.Nif do
                   @memcpy(prev_data, data);
               }
 
-              domains.items[i] = .{ .domain = domain, .state = state, .prev_data = prev_data, .data = data };
+              domain_config.state = state;
+              domain_config.prev_data = prev_data;
+              domain_config.data = data;
 
               _ = ecrt.ecrt_domain_queue(domain);
           }
 
           // Process all slaves
-          for (slaves.items, 0..) |tuple, i| {
-              const slave = tuple.slave;
-              const prev_state = tuple.state;
+          for (slave_configs) |*slave_config| {
+              const pid = slave_config.pid;
+              const slave = slave_config.resource.unpack();
+              const prev_state = slave_config.state;
               var state: ec_slave_config_state_t = undefined;
 
               _ = ecrt.ecrt_slave_config_state(slave, @ptrCast(&state));
@@ -339,7 +342,7 @@ defmodule EthercatEx.Nif do
                   _ = try beam.send(pid, .operational_changed, .{state.operational});
               }
 
-              slaves.items[i] = .{ .slave = slave, .state = state };
+              slave_config.state = state;
           }
 
           _ = ecrt.ecrt_master_send(master);

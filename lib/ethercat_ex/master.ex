@@ -281,16 +281,29 @@ defmodule EthercatEx.Master do
     {:reply, {:error, :already_running}, state}
   end
 
-  def handle_call(:start_cyclic_task, _from, %{master_ref: master_ref, domains: domains} = state)
-      when map_size(domains) > 0 do
-    # Use the first domain for the cyclic task
-    {_domain_id, domain_ref} = Enum.at(domains, 0)
-
+  def handle_call(:start_cyclic_task, _from, %{master_ref: master_ref, domains: domains, slaves: slaves} = state) do
     parent_pid = self()
+
+    domain_configs = Enum.map(domains, fn pid ->
+      %{
+        pid: pid,
+        resource: Domain.get_ref(pid),
+        interval: 0
+      }
+      |> IO.inspect()
+    end)
+
+    slave_configs = Enum.map(slaves, fn pid ->
+      %{
+        pid: pid,
+        resource: Slave.get_config_ref(pid)
+      }
+      |> IO.inspect()
+    end)
 
     task_pid =
       spawn_link(fn ->
-        #Nif.cyclic_task(parent_pid, master_ref, domain_ref, state.cycle_time_ms)
+        Nif.cyclic_task(parent_pid, master_ref, domain_configs, slave_configs)
       end)
 
     new_state = %{state | cyclic_task_pid: task_pid}

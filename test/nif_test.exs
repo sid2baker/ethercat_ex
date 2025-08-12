@@ -1,5 +1,5 @@
 defmodule EthernetEx.NifTest do
-  use EthercatEx.TestSetup
+  use ExUnit.Case
 
   import EthercatEx.TestHelpers
 

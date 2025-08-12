@@ -1,5 +1,5 @@
 defmodule EthercatEx.Slave.ConfigTest do
-  use EthercatEx.TestSetup
+  use ExUnit.Case
 
   alias EthercatEx.Slave.Config
 

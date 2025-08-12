@@ -1,5 +1,5 @@
 defmodule EthercatEx.MasterTest do
-  use EthercatEx.TestSetup
+  use ExUnit.Case
 
   alias EthercatEx.{Master, Slave}
 

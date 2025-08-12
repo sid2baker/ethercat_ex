@@ -27,6 +27,7 @@ defmodule EthercatEx.Nif do
       domain_queue: [],
       domain_data: [],
       get_domain_value: [],
+      set_domain_value: [],
       domain_state: [],
       slave_config_sync_manager: [],
       slave_config_pdo_assign_add: [],
@@ -180,6 +181,19 @@ defmodule EthercatEx.Nif do
       const data = ecrt.ecrt_domain_data(domain.unpack());
       std.debug.print("Byte 0: {}, Byte 1: {}\n", .{ data[0], data[1] });
       return data[offset];
+  }
+
+  // TODO handle bit precise offset
+  pub fn set_domain_value(domain: DomainResource, offset: u32, value: []u8) !void {
+      const target: [*]u8 = ecrt.ecrt_domain_data(domain.unpack());
+      for (value, 0..) |byte, i| {
+          target[i+offset] = byte;
+      }
+  }
+
+  pub fn subscribe_domain_value(domain: DomainResource, offset: u32) !void {
+      const data = ecrt.ecrt_domain_data(domain.unpack());
+      _ = ecrt.ecrt_domain_subscribe(domain.unpack(), offset, data[offset]);
   }
 
   pub fn domain_state(domain: DomainResource) !beam.term {

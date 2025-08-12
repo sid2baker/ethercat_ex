@@ -59,10 +59,11 @@ defmodule EthercatEx.Slave.ConfigTest do
     end
 
     test "adds multiple sync managers", %{sc: sc} do
-      updated_sc = sc
-                   |> Config.add_sync_manager!(0, :input, :default)
-                   |> Config.add_sync_manager!(1, :output, :enable)
-                   |> Config.add_sync_manager!(2, :input, :disable)
+      updated_sc =
+        sc
+        |> Config.add_sync_manager!(0, :input, :default)
+        |> Config.add_sync_manager!(1, :output, :enable)
+        |> Config.add_sync_manager!(2, :input, :disable)
 
       assert map_size(updated_sc.sync_managers) == 3
       assert updated_sc.sync_managers[0].direction == :input
@@ -72,9 +73,10 @@ defmodule EthercatEx.Slave.ConfigTest do
     end
 
     test "overwrites existing sync manager at same index", %{sc: sc} do
-      updated_sc = sc
-                   |> Config.add_sync_manager!(0, :input, :default)
-                   |> Config.add_sync_manager!(0, :output, :enable)
+      updated_sc =
+        sc
+        |> Config.add_sync_manager!(0, :input, :default)
+        |> Config.add_sync_manager!(0, :output, :enable)
 
       assert map_size(updated_sc.sync_managers) == 1
       sync_manager = updated_sc.sync_managers[0]
@@ -99,10 +101,11 @@ defmodule EthercatEx.Slave.ConfigTest do
     end
 
     test "adds multiple PDO assignments to same sync manager", %{sc: sc} do
-      updated_sc = sc
-                   |> Config.add_pdo_assignment!(0, 0x1600)
-                   |> Config.add_pdo_assignment!(0, 0x1601)
-                   |> Config.add_pdo_assignment!(0, 0x1602)
+      updated_sc =
+        sc
+        |> Config.add_pdo_assignment!(0, 0x1600)
+        |> Config.add_pdo_assignment!(0, 0x1601)
+        |> Config.add_pdo_assignment!(0, 0x1602)
 
       sync_manager = updated_sc.sync_managers[0]
       assert map_size(sync_manager.pdos) == 3
@@ -112,10 +115,11 @@ defmodule EthercatEx.Slave.ConfigTest do
     end
 
     test "adds PDO assignments to different sync managers", %{sc: sc} do
-      updated_sc = sc
-                   |> Config.add_sync_manager!(1, :output, :default)
-                   |> Config.add_pdo_assignment!(0, 0x1600)
-                   |> Config.add_pdo_assignment!(1, 0x1A00)
+      updated_sc =
+        sc
+        |> Config.add_sync_manager!(1, :output, :default)
+        |> Config.add_pdo_assignment!(0, 0x1600)
+        |> Config.add_pdo_assignment!(1, 0x1A00)
 
       assert Map.has_key?(updated_sc.sync_managers[0].pdos, 0x1600)
       assert Map.has_key?(updated_sc.sync_managers[1].pdos, 0x1A00)
@@ -125,9 +129,12 @@ defmodule EthercatEx.Slave.ConfigTest do
   describe "add_pdo_entry!/6" do
     setup do
       {:ok, sc} = Config.create(1, 1, 0xFF11, 0xFF22)
-      sc = sc
-           |> Config.add_sync_manager!(0, :input, :default)
-           |> Config.add_pdo_assignment!(0, 0x1600)
+
+      sc =
+        sc
+        |> Config.add_sync_manager!(0, :input, :default)
+        |> Config.add_pdo_assignment!(0, 0x1600)
+
       {:ok, sc: sc}
     end
 
@@ -140,10 +147,11 @@ defmodule EthercatEx.Slave.ConfigTest do
     end
 
     test "adds multiple PDO entries to same PDO", %{sc: sc} do
-      updated_sc = sc
-                   |> Config.add_pdo_entry!(0, 0x1600, "name1", {0x6000, 0x01, 8}, :my_domain)
-                   |> Config.add_pdo_entry!(0, 0x1600, "name2", {0x6001, 0x01, 32}, :my_domain)
-                   |> Config.add_pdo_entry!(0, 0x1600, "name3", {0x6002, 0x01, 16}, :my_domain)
+      updated_sc =
+        sc
+        |> Config.add_pdo_entry!(0, 0x1600, "name1", {0x6000, 0x01, 8}, :my_domain)
+        |> Config.add_pdo_entry!(0, 0x1600, "name2", {0x6001, 0x01, 32}, :my_domain)
+        |> Config.add_pdo_entry!(0, 0x1600, "name3", {0x6002, 0x01, 16}, :my_domain)
 
       pdo_entries = updated_sc.sync_managers[0].pdos[0x1600]
       assert length(pdo_entries) == 3
@@ -154,12 +162,14 @@ defmodule EthercatEx.Slave.ConfigTest do
     end
 
     test "preserves order of PDO entries", %{sc: sc} do
-      updated_sc = sc
-                   |> Config.add_pdo_entry!(0, 0x1600, "name1", {0x6000, 0x01, 8}, :my_domain)
-                   |> Config.add_pdo_entry!(0, 0x1600, "name2", {0x6001, 0x01, 32}, :my_domain)
-                   |> Config.add_pdo_entry!(0, 0x1600, "name3", {0x6002, 0x01, 16}, :my_domain)
+      updated_sc =
+        sc
+        |> Config.add_pdo_entry!(0, 0x1600, "name1", {0x6000, 0x01, 8}, :my_domain)
+        |> Config.add_pdo_entry!(0, 0x1600, "name2", {0x6001, 0x01, 32}, :my_domain)
+        |> Config.add_pdo_entry!(0, 0x1600, "name3", {0x6002, 0x01, 16}, :my_domain)
 
       pdo_entries = updated_sc.sync_managers[0].pdos[0x1600]
+
       expected_entries = [
         %{name: "name1", entry: {0x6000, 0x01, 8}, domain: :my_domain},
         %{name: "name2", entry: {0x6001, 0x01, 32}, domain: :my_domain},
@@ -170,10 +180,11 @@ defmodule EthercatEx.Slave.ConfigTest do
     end
 
     test "adds entries to different PDOs", %{sc: sc} do
-      updated_sc = sc
-                   |> Config.add_pdo_assignment!(0, 0x1601)
-                   |> Config.add_pdo_entry!(0, 0x1600, "name1", {0x6000, 0x01, 8})
-                   |> Config.add_pdo_entry!(0, 0x1601, "name2", {0x6010, 0x01, 16})
+      updated_sc =
+        sc
+        |> Config.add_pdo_assignment!(0, 0x1601)
+        |> Config.add_pdo_entry!(0, 0x1600, "name1", {0x6000, 0x01, 8})
+        |> Config.add_pdo_entry!(0, 0x1601, "name2", {0x6010, 0x01, 16})
 
       pdo_entries_1600 = updated_sc.sync_managers[0].pdos[0x1600]
       pdo_entries_1601 = updated_sc.sync_managers[0].pdos[0x1601]

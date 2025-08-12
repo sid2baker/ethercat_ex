@@ -23,7 +23,7 @@ defmodule EthercatEx.Slave.Config do
           pdos: %{non_neg_integer() => [data_object()]}
         }
 
-  @type direction :: :input | :output
+  @type direction :: :invalid | :input | :output | :count
   @type watchdog_mode :: :default | :enable | :disable
 
   @type data_object :: %{

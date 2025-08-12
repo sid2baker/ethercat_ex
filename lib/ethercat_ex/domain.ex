@@ -7,12 +7,10 @@ defmodule EthercatEx.Domain do
   """
   use GenServer
 
-  defstruct [
-    ref: nil,
-    binary_template: [],
-    data_objects: %{},
-    active: false
-  ]
+  defstruct ref: nil,
+            binary_template: [],
+            data_objects: %{},
+            active: false
 
   @type t :: %__MODULE__{
           ref: reference() | nil,
@@ -70,8 +68,10 @@ defmodule EthercatEx.Domain do
   end
 
   def handle_info({:data_changed, data}, %{active: true} = state) do
-    data_objects = match_binary(data, state.binary_template)
-    |> IO.inspect(label: "Data Objects")
+    data_objects =
+      match_binary(data, state.binary_template)
+      |> IO.inspect(label: "Data Objects")
+
     # TODO send msg to subscribers
     {:noreply, %{state | data_objects: data_objects}}
   end

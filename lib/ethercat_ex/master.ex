@@ -153,6 +153,7 @@ defmodule EthercatEx.Master do
   @impl true
   def init(opts) do
     master = Nif.request_master()
+
     state = %__MODULE__{
       master_ref: master,
       domains: [],
@@ -188,13 +189,33 @@ defmodule EthercatEx.Master do
     # TODO find a better solution to get current domains
     domains =
       for {sync_index, sync_manager} <- slave_config.sync_managers do
+        direction =
+          case sync_manager.direction do
+            :output -> 1
+            :input -> 2
+            :count -> 3
+            _ -> 0
+          end
+
+        watchdog_mode =
+          case sync_manager.watchdog_mode do
+            :enable -> 1
+            :disable -> 2
+            _ -> 0
+          end
+
+        Nif.slave_config_sync_manager(sc, sync_index, direction, watchdog_mode)
         Nif.slave_config_pdo_assign_clear(sc, sync_index)
 
         for {pdo_index, data_objects} <- sync_manager.pdos do
           Nif.slave_config_pdo_assign_add(sc, sync_index, pdo_index)
           Nif.slave_config_pdo_mapping_clear(sc, pdo_index)
 
-          for %{entry: {entry_index, entry_subindex, entry_size}, domain: domain_name, name: entry_name} <-
+          for %{
+                entry: {entry_index, entry_subindex, entry_size},
+                domain: domain_name,
+                name: entry_name
+              } <-
                 data_objects do
             {domain_ref, domain_pid, domains} =
               case Domain.start_link(domain_name) do
@@ -281,25 +302,31 @@ defmodule EthercatEx.Master do
     {:reply, {:error, :already_running}, state}
   end
 
-  def handle_call(:start_cyclic_task, _from, %{master_ref: master_ref, domains: domains, slaves: slaves} = state) do
+  def handle_call(
+        :start_cyclic_task,
+        _from,
+        %{master_ref: master_ref, domains: domains, slaves: slaves} = state
+      ) do
     parent_pid = self()
 
-    domain_configs = Enum.map(domains, fn pid ->
-      %{
-        pid: pid,
-        resource: Domain.get_ref(pid),
-        interval: 0
-      }
-      |> IO.inspect()
-    end)
+    domain_configs =
+      Enum.map(domains, fn pid ->
+        %{
+          pid: pid,
+          resource: Domain.get_ref(pid),
+          interval: 0
+        }
+        |> IO.inspect()
+      end)
 
-    slave_configs = Enum.map(slaves, fn pid ->
-      %{
-        pid: pid,
-        resource: Slave.get_config_ref(pid)
-      }
-      |> IO.inspect()
-    end)
+    slave_configs =
+      Enum.map(slaves, fn pid ->
+        %{
+          pid: pid,
+          resource: Slave.get_config_ref(pid)
+        }
+        |> IO.inspect()
+      end)
 
     task_pid =
       spawn_link(fn ->

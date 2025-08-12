@@ -194,17 +194,17 @@ defmodule EthercatEx.Master do
           Nif.slave_config_pdo_assign_add(sc, sync_index, pdo_index)
           Nif.slave_config_pdo_mapping_clear(sc, pdo_index)
 
-          for %{entry: {entry_index, entry_subindex, entry_size}, domain: domain_name} <-
+          for %{entry: {entry_index, entry_subindex, entry_size}, domain: domain_name, name: entry_name} <-
                 data_objects do
-            {domain_ref, domains} =
+            {domain_ref, domain_pid, domains} =
               case Domain.start_link(domain_name) do
                 {:ok, pid} ->
                   domain_ref = Nif.master_create_domain(state.master_ref)
                   :ok = Domain.set_ref(pid, domain_ref)
-                  {domain_ref, [pid | state.domains]}
+                  {domain_ref, pid, [pid | state.domains]}
 
                 {:error, {:already_started, pid}} ->
-                  {Domain.get_ref(pid), state.domains}
+                  {Domain.get_ref(pid), pid, state.domains}
               end
 
             Nif.slave_config_pdo_mapping_add(
@@ -215,7 +215,10 @@ defmodule EthercatEx.Master do
               entry_size
             )
 
-            Nif.slave_config_reg_pdo_entry(sc, entry_index, entry_subindex, domain_ref)
+            offset = Nif.slave_config_reg_pdo_entry(sc, entry_index, entry_subindex, domain_ref)
+            # TODO get bitsize offset and add it to offset
+            Domain.add_offset(domain_pid, entry_name, offset * 8, entry_size)
+
             domains
           end
         end

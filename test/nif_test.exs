@@ -11,37 +11,37 @@ defmodule EthernetEx.NifTest do
   end
 
   test "create master" do
-    master = EthercatEx.Nif.request_master()
+    master = EthercatEx.Nif.request_master(0)
     assert is_reference(master)
   end
 
   test "adding domain" do
-    master = EthercatEx.Nif.request_master()
+    master = EthercatEx.Nif.request_master(0)
     domain = EthercatEx.Nif.master_create_domain(master)
     assert is_reference(master)
     assert is_reference(domain)
   end
 
   test "add domain to released master" do
-    master = EthercatEx.Nif.request_master()
+    master = EthercatEx.Nif.request_master(0)
     EthercatEx.Nif.release_master(master)
     EthercatEx.Nif.master_create_domain(master)
   end
 
   test "release already released master" do
-    master = EthercatEx.Nif.request_master()
+    master = EthercatEx.Nif.request_master(0)
     EthercatEx.Nif.release_master(master)
     EthercatEx.Nif.release_master(master)
   end
 
   test "get slave info" do
-    master = Nif.request_master()
+    master = Nif.request_master(0)
     slave_info = Nif.master_get_slave(master, 0)
     assert slave_info.alias == 0
   end
 
   test "create slave config" do
-    master = Nif.request_master()
+    master = Nif.request_master(0)
     Nif.master_slave_config(master, 0, 0, 0xFF11, 0xFF22)
 
     Nif.master_slave_config(master, 0, 0, 0xFF11, 0xFF23)
@@ -49,7 +49,7 @@ defmodule EthernetEx.NifTest do
   end
 
   test "test" do
-    master = Nif.request_master()
+    master = Nif.request_master(0)
     domain = Nif.master_create_domain(master)
 
     # input card

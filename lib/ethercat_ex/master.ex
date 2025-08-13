@@ -152,7 +152,8 @@ defmodule EthercatEx.Master do
 
   @impl true
   def init(opts) do
-    master = Nif.request_master()
+    master_index = Keyword.get(opts, :master_index, 0)
+    master = Nif.request_master(master_index)
 
     state = %__MODULE__{
       master_ref: master,
@@ -227,6 +228,7 @@ defmodule EthercatEx.Master do
                 {:error, {:already_started, pid}} ->
                   {Domain.get_ref(pid), pid, state.domains}
               end
+              |> IO.inspect()
 
             Nif.slave_config_pdo_mapping_add(
               sc,

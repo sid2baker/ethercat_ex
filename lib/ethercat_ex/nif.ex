@@ -92,8 +92,8 @@ defmodule EthercatEx.Nif do
       return ecrt.ecrt_version_magic();
   }
 
-  pub fn request_master() !MasterResource {
-      const master = ecrt.ecrt_request_master(0) orelse return MasterError.MasterNotFound;
+  pub fn request_master(index: u32) !MasterResource {
+      const master = ecrt.ecrt_request_master(index) orelse return MasterError.MasterNotFound;
       return MasterResource.create(master, .{ .released = false });
   }
 

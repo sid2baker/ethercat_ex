@@ -6,9 +6,10 @@ defmodule EthercatEx.Slave do
   """
   use GenServer
 
-  defstruct [:config_ref, :config]
+  defstruct [:master, :config_ref, :config]
 
   @type t :: %__MODULE__{
+          master: pid(),
           config_ref: reference(),
           config: Slave.t()
         }

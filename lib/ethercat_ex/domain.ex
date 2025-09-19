@@ -76,6 +76,11 @@ defmodule EthercatEx.Domain do
     {:noreply, %{state | data_objects: data_objects}}
   end
 
+  def handle_info(msg, state) do
+    IO.inspect(msg, label: "Domain received message")
+    {:noreply, state}
+  end
+
   def match_binary(binary, binary_template) do
     Enum.reduce(binary_template, %{}, fn {name, {offset, size}}, acc ->
       <<_::size(offset), segment::size(size), _::binary>> = binary

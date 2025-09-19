@@ -29,4 +29,9 @@ defmodule EthercatEx.Slave do
   def handle_call(:get_config_ref, _from, state) do
     {:reply, state.config_ref, state}
   end
+
+  def handle_info(msg, state) do
+    IO.inspect(msg, label: "Slave received message")
+    {:noreply, state}
+  end
 end

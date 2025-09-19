@@ -10,6 +10,38 @@ defmodule EthercatEx.Example do
   import Bitwise
   alias EthercatEx.{Master, Slave, Domain}
 
+  def simple do
+    {:ok, master} = Master.start_link()
+
+    {:ok, sc} = Slave.Config.create(0, 0, 0x00000002, 0x044C2C52)
+    Master.add_slave_config(master, sc)
+    {:ok, sc} = Slave.Config.create(0, 1, 0x00000002, 0x07113052)
+    Master.add_slave_config(master, sc)
+
+    Master.activate(master)
+    master
+  end
+
+  def test() do
+    {:ok, master} = Master.start_link()
+    {:ok, sc} = Slave.Config.create(0, 0, 0x00000002, 0x044C2C52)
+
+    Master.add_slave_config(master, sc)
+
+    {:ok, sc} = Slave.Config.create(0, 1, 0x00000002, 0x07113052)
+
+    sc =
+      sc
+      |> Slave.Config.add_sync_manager!(0, :input, :disable)
+      |> Slave.Config.add_pdo_assignment!(0, 0x1A00)
+      |> Slave.Config.add_pdo_entry!(0, 0x1A00, "input", {0x6000, 0x01, 1}, :example_domain)
+
+    Master.add_slave_config(master, sc)
+
+    Master.activate(master)
+    master
+  end
+
   @doc """
   Basic example of setting up an EtherCAT master with digital I/O slaves.
 

@@ -1,13 +1,17 @@
 defmodule EthercatEx.Nif do
   @moduledoc false
+  require Logger
+
   use Zig,
     otp_app: :ethercat_ex,
     c: [
       include_dirs: "/usr/include/",
       link_lib:
         if Mix.env() == :test do
+          Logger.info("Linking against libfakeethercat")
           [{:system, "fakeethercat"}, {:system, "ethercat"}]
         else
+          Logger.info("Linking against libethercat")
           {:system, "ethercat"}
         end
     ],
@@ -137,7 +141,7 @@ defmodule EthercatEx.Nif do
       if (result != 0) {
           return MasterError.GetSlaveError;
       }
-      return beam.make(slave_info, .{});
+      return beam.make(.{ .ok, slave_info }, .{});
   }
 
   pub fn master_reset(master: MasterResource) !void {
@@ -187,7 +191,7 @@ defmodule EthercatEx.Nif do
   pub fn set_domain_value(domain: DomainResource, offset: u32, value: []u8) !void {
       const target: [*]u8 = ecrt.ecrt_domain_data(domain.unpack());
       for (value, 0..) |byte, i| {
-          target[i+offset] = byte;
+          target[i + offset] = byte;
       }
   }
 
@@ -250,121 +254,122 @@ defmodule EthercatEx.Nif do
   }
 
   pub fn cyclic_task(master_pid: beam.pid, master_resource: MasterResource, domain_pids: []beam.pid, domain_resources: []DomainResource, slave_pids: []beam.pid, slave_resources: []SlaveConfigResource) !void {
-        if (domain_pids.len != domain_resources.len or slave_pids.len != slave_resources.len) {
+      if (domain_pids.len != domain_resources.len or slave_pids.len != slave_resources.len) {
           return error.MismatchedSliceLengths;
-        }
+      }
 
-        const master = master_resource.unpack();
-        var master_state: ec_master_state_t = undefined;
-        var prev_master_state: ec_master_state_t = undefined;
+      const master = master_resource.unpack();
+      var master_state: ec_master_state_t = undefined;
+      var prev_master_state: ec_master_state_t = undefined;
 
-        var domains = std.ArrayList(struct {
-            domain: *ecrt.ec_domain_t,
-            state: ecrt.ec_domain_state_t,
-            prev_data: []u8,
-            data: []u8,
-        }).init(beam.allocator);
-        defer domains.deinit();
+      var domains = std.ArrayList(struct {
+          domain: *ecrt.ec_domain_t,
+          state: ecrt.ec_domain_state_t,
+          prev_data: []u8,
+          data: []u8,
+      }).init(beam.allocator);
+      defer domains.deinit();
 
-        for (domain_resources) |domain_resource| {
-            const domain = domain_resource.unpack();
-            const size = ecrt.ecrt_domain_size(domain);
-            const data_ptr = ecrt.ecrt_domain_data(domain);
-            if (data_ptr == null or size == 0) {
-                return MasterError.InvalidDomainData;
-            }
-            // Memory is handled by ecrt.h
-            const data = data_ptr[0..size];
-            const prev_data: []u8 = beam.allocator.alloc(u8, size) catch return error.OutOfMemory;
-            @memcpy(prev_data, data);
+      for (domain_resources) |domain_resource| {
+          const domain = domain_resource.unpack();
+          const size = ecrt.ecrt_domain_size(domain);
+          const data_ptr = ecrt.ecrt_domain_data(domain);
+          if (data_ptr == null or size == 0) {
+              return MasterError.InvalidDomainData;
+          }
+          // Memory is handled by ecrt.h
+          const data = data_ptr[0..size];
+          const prev_data: []u8 = beam.allocator.alloc(u8, size) catch return error.OutOfMemory;
+          @memcpy(prev_data, data);
 
-            try domains.append(.{ .domain = domain, .state = undefined, .prev_data = prev_data, .data = data });
-        }
+          try domains.append(.{ .domain = domain, .state = undefined, .prev_data = prev_data, .data = data });
+      }
 
-        var slaves = std.ArrayList(struct {
-            slave: *ecrt.ec_slave_config_t,
-            state: ec_slave_config_state_t,
-        }).init(beam.allocator);
-        defer slaves.deinit();
+      var slaves = std.ArrayList(struct {
+          slave: *ecrt.ec_slave_config_t,
+          state: ec_slave_config_state_t,
+      }).init(beam.allocator);
+      defer slaves.deinit();
 
-        for (slave_resources) |slave_resource| {
-            try slaves.append(.{ .slave = slave_resource.unpack(), .state = undefined });
-        }
+      for (slave_resources) |slave_resource| {
+          try slaves.append(.{ .slave = slave_resource.unpack(), .state = undefined });
+      }
 
-        defer {
-            beam.send(master_pid, .killed, .{}) catch {};
-        }
+      defer {
+          beam.send(master_pid, .killed, .{}) catch {};
+      }
 
-        while (true) {
-            _ = ecrt.ecrt_master_receive(master);
+      while (true) {
+          _ = ecrt.ecrt_master_receive(master);
 
-            _ = ecrt.ecrt_master_state(master, @ptrCast(&master_state));
+          _ = ecrt.ecrt_master_state(master, @ptrCast(&master_state));
 
-            if (master_state.slaves_responding != prev_master_state.slaves_responding) {
-                _ = try beam.send(master_pid, .slaves_responding, .{master_state.slaves_responding});
-            }
-            if (master_state.al_states != prev_master_state.al_states) {
-                _ = try beam.send(master_pid, .al_states, .{master_state.al_states});
-            }
-            if (master_state.link_up != prev_master_state.link_up) {
-                _ = try beam.send(master_pid, .link_up, .{master_state.link_up});
-            }
-            prev_master_state = master_state;
+          if (master_state.slaves_responding != prev_master_state.slaves_responding) {
+              _ = try beam.send(master_pid, .{ .slaves_responding, master_state.slaves_responding }, .{});
+          }
+          if (master_state.al_states != prev_master_state.al_states) {
+              _ = try beam.send(master_pid, .{ .al_states, master_state.al_states }, .{});
+          }
+          if (master_state.link_up != prev_master_state.link_up) {
+              _ = try beam.send(master_pid, .{ .link_up, master_state.link_up }, .{});
+          }
+          prev_master_state = master_state;
 
-            // Process all domains
-            for (domains.items, 0..) |tuple, i| {
-                const domain_pid = domain_pids[i];
-                const domain = tuple.domain;
-                const prev_state = tuple.state;
-                var state: ecrt.ec_domain_state_t = undefined;
-                const prev_data = tuple.prev_data;
-                const data = tuple.data;
+          // Process all domains
+          for (domains.items, 0..) |tuple, i| {
+              const domain_pid = domain_pids[i];
+              const domain = tuple.domain;
+              const prev_state = tuple.state;
+              var state: ecrt.ec_domain_state_t = undefined;
+              const prev_data = tuple.prev_data;
+              const data = tuple.data;
 
-                _ = ecrt.ecrt_domain_process(domain);
-                _ = ecrt.ecrt_domain_state(domain, &state);
+              _ = ecrt.ecrt_domain_process(domain);
+              _ = ecrt.ecrt_domain_state(domain, &state);
 
-                if (state.working_counter != prev_state.working_counter) {
-                    _ = try beam.send(domain_pid, .wc_changed, .{state.working_counter});
-                }
-                if (state.wc_state != prev_state.wc_state) {
-                    _ = try beam.send(domain_pid, .state_changed, .{state.wc_state});
-                }
+              if (state.working_counter != prev_state.working_counter) {
+                  _ = try beam.send(domain_pid, .{ .wc_changed, state.working_counter }, .{});
+              }
+              if (state.wc_state != prev_state.wc_state) {
+                  _ = try beam.send(domain_pid, .{ .state_changed, state.wc_state }, .{});
+              }
 
-                if (!std.mem.eql(u8, data, prev_data)) {
-                    _ = try beam.send(domain_pid, .data_changed, .{data});
-                    @memcpy(prev_data, data);
-                }
+              if (!std.mem.eql(u8, data, prev_data)) {
+                  _ = try beam.send(domain_pid, .{ .data_changed, data }, .{});
+                  @memcpy(prev_data, data);
+              }
 
-                domains.items[i] = .{ .domain = domain, .state = state, .prev_data = prev_data, .data = data };
+              domains.items[i] = .{ .domain = domain, .state = state, .prev_data = prev_data, .data = data };
 
-                _ = ecrt.ecrt_domain_queue(domain);
-            }
+              _ = ecrt.ecrt_domain_queue(domain);
+          }
 
-            // Process all slaves
-            for (slaves.items, 0..) |tuple, i| {
-                const slave_pid = slave_pids[i];
-                const slave = tuple.slave;
-                const prev_state = tuple.state;
-                var state: ec_slave_config_state_t = undefined;
+          // Process all slaves
+          for (slaves.items, 0..) |tuple, i| {
+              const slave_pid = slave_pids[i];
+              const slave = tuple.slave;
+              const prev_state = tuple.state;
+              var state: ec_slave_config_state_t = undefined;
 
-                _ = ecrt.ecrt_slave_config_state(slave, @ptrCast(&state));
+              _ = ecrt.ecrt_slave_config_state(slave, @ptrCast(&state));
 
-                if (state.al_state != prev_state.al_state) {
-                    _ = try beam.send(slave_pid, .state_changed, .{state.al_state});
-                }
-                if (state.online != prev_state.online) {
-                    _ = try beam.send(slave_pid, .online_changed, .{state.online});
-                }
-                if (state.operational != prev_state.operational) {
-                    _ = try beam.send(slave_pid, .operational_changed, .{state.operational});
-                }
+              if (state.al_state != prev_state.al_state) {
+                  _ = try beam.send(slave_pid, .{ .state_changed, state.al_state }, .{});
+              }
+              if (state.online != prev_state.online) {
+                  _ = try beam.send(slave_pid, .{ .online_changed, state.online }, .{});
+              }
+              if (state.operational != prev_state.operational) {
+                  _ = try beam.send(slave_pid, .{ .operational_changed, state.operational }, .{});
+              }
 
-                slaves.items[i] = .{ .slave = slave, .state = state };
-            }
+              slaves.items[i] = .{ .slave = slave, .state = state };
+          }
 
-            _ = ecrt.ecrt_master_send(master);
-            try beam.yield();
-        }
-    }
+          _ = ecrt.ecrt_master_send(master);
+          try beam.yield();
+          std.time.sleep(1_000_000_000);
+      }
+  }
   """
 end

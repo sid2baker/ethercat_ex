@@ -3,6 +3,7 @@ defmodule EthercatEx.ExampleSlaves do
 
   def new() do
     {:ok, master} = Master.start_link(master_index: 999, name: FakeMaster)
+
     master
     |> create_input_card(0)
     |> create_output_card(1)
@@ -25,6 +26,7 @@ defmodule EthercatEx.ExampleSlaves do
 
   def create_output_card(master, position) do
     {:ok, sc} = Slave.Config.create(0, position, 0xFF11, 0xFF33)
+
     sc =
       sc
       |> Slave.Config.add_sync_manager!(3, :input, :disable)

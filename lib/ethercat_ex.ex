@@ -5,6 +5,14 @@ defmodule EthercatEx do
   This module provides a high-level interface to configure and manage EtherCAT communication
   through a GenServer-based architecture that manages the master state and provides clean
   Elixir APIs for EtherCAT operations.
+
+  There has to be two ways to configure an ethercat master.
+  1. Dynamically when the master is connected to the slaves.
+  2. Statically when before the master is connected to the slaves.
+
+  1.
+  - Get slave info
+  - Save
   """
 
   alias EthercatEx.{Master, Slave, Domain, Nif}
@@ -42,45 +50,8 @@ defmodule EthercatEx do
   end
 
   def test do
-    master = Nif.request_master()
+    master = Nif.request_master(0)
     domain = Nif.master_create_domain(master)
-
-    # input card
-    slave_pos = 2
-    sync_index = 0
-    pdo_index = 0x1A00
-    entry_index = 0x6000
-    entry_subindex = 0x01
-    slave = Nif.master_get_slave(master, slave_pos)
-
-    sc =
-      Nif.master_slave_config(master, sync_index, slave_pos, slave.vendor_id, slave.product_code)
-
-    # Nif.slave_config_sync_manager(sc, sync_index, 2, 1) # EC_DIR_INPUT = 2
-    # Nif.slave_config_pdo_assign_clear(sc, sync_index)
-    # Nif.slave_config_pdo_assign_add(sc, sync_index, pdo_index)
-    # Nif.slave_config_pdo_mapping_clear(sc, pdo_index)
-    # Nif.slave_config_pdo_mapping_add(sc, pdo_index, entry_index, entry_subindex, 1)
-
-    offset =
-      Nif.slave_config_reg_pdo_entry(sc, entry_index, entry_subindex, domain)
-      |> IO.inspect(label: "input: ")
-
-    offset =
-      Nif.slave_config_reg_pdo_entry(sc, 0x6010, entry_subindex, domain)
-      |> IO.inspect(label: "input: ")
-
-    offset =
-      Nif.slave_config_reg_pdo_entry(sc, 0x6020, entry_subindex, domain)
-      |> IO.inspect(label: "input: ")
-
-    offset =
-      Nif.slave_config_reg_pdo_entry(sc, 0x6030, entry_subindex, domain)
-      |> IO.inspect(label: "input: ")
-
-    offset =
-      Nif.slave_config_reg_pdo_entry(sc, 0x6080, entry_subindex, domain)
-      |> IO.inspect(label: "input: ")
 
     # output card
     slave_pos = 3
@@ -88,18 +59,35 @@ defmodule EthercatEx do
     pdo_index = 0x1600
     entry_index = 0x7000
     entry_subindex = 0x01
-    slave = Nif.master_get_slave(master, slave_pos)
 
-    sc =
-      Nif.master_slave_config(master, sync_index, slave_pos, slave.vendor_id, slave.product_code)
+    # input card
+    alias = 0
+    slave_pos = 0
+    sync_index = 2
+    pdo_index = 0x1A00
+    entry_index = 0x6000
+    entry_subindex = 0x00
+    entry_bit_length = 1
+    # EC_DIR_INPUT
+    direction = 2
+    # EC_WD_DEFAULT
+    watchdog = 0
+
+    sc = Nif.master_slave_config(master, alias, slave_pos, 0xFF11, 0xFF22)
+
+    Nif.slave_config_sync_manager(sc, sync_index, direction, watchdog)
+
+    Nif.slave_config_pdo_assign_clear(sc, sync_index)
+    Nif.slave_config_pdo_assign_add(sc, sync_index, pdo_index)
+    Nif.slave_config_pdo_mapping_clear(sc, pdo_index)
+    Nif.slave_config_pdo_mapping_add(sc, pdo_index, entry_index, entry_subindex, entry_bit_length)
 
     offset =
       Nif.slave_config_reg_pdo_entry(sc, entry_index, entry_subindex, domain)
-      |> IO.inspect(label: "output: ")
+      |> IO.inspect(label: "input: ")
 
     Nif.master_activate(master)
-    spawn(master, [domain], [sc])
-    {master, domain, sc}
+    Nif.cyclic_task(self(), master, [domain], [sc])
   end
 
   def start_cyclic(master, domains, slaves) do

@@ -24,7 +24,7 @@ defmodule EthercatEx.MixProject do
 
   defp deps do
     [
-      {:zigler, "~> 0.14.1", runtime: false}
+      {:zigler, github: "E-xyza/zigler", runtime: false}
     ]
   end
 end
